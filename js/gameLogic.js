@@ -79,6 +79,53 @@ class GameLogic {
         return targets;
     }
 
+    // Card-specific build preview (read-only): the subset of legal build
+    // targets that THIS hand card could pay for. Uses the same checks as the
+    // server (getValidBuildTargets + getValidCardsForAction), so the glow
+    // matches what the server accepts.
+    getBuildTargetsForCard(playerId, cardIndex) {
+        const card = this.state.players[playerId]?.hand?.[cardIndex];
+        if (!card) return [];
+        return this.getValidBuildTargets(playerId).filter(t =>
+            this.getValidCardsForAction(playerId, ACTIONS.BUILD, t).includes(cardIndex));
+    }
+
+    // Main reason (Chinese) why a card currently has no legal build spot.
+    explainNoBuildForCard(playerId, cardIndex) {
+        const card = this.state.players[playerId]?.hand?.[cardIndex];
+        if (!card) return '沒有這張牌';
+        const isLoc = card.type === CARD_TYPES.LOCATION || card.type === CARD_TYPES.WILD_LOCATION;
+        const types = card.type === CARD_TYPES.INDUSTRY ? card.industryTypes : Object.values(INDUSTRY_TYPES);
+        let cities = Object.keys(CITIES);
+        if (card.type === CARD_TYPES.LOCATION) cities = [card.location];
+        if (card.type === CARD_TYPES.INDUSTRY || card.type === CARD_TYPES.WILD_INDUSTRY) cities = cities.concat(Object.keys(BREWERY_FARMS));
+        const counts = {};
+        const bump = r => { counts[r] = (counts[r] || 0) + 1; };
+        const anyOk = this.playerHasNoTilesOnBoard(playerId);
+        for (const cityId of cities) {
+            const farm = isBreweryFarm(cityId);
+            const slots = farm ? [[INDUSTRY_TYPES.BREWERY]] : (CITIES[cityId]?.slots || []);
+            slots.forEach((st, slotIndex) => {
+                const allowed = [].concat(st);
+                for (const type of types) {
+                    if (!allowed.includes(type)) continue;
+                    const tile = this.state.getNextTile(playerId, type);
+                    if (!tile) { bump('該產業板塊已用完'); continue; }
+                    if ((this.state.era === ERA.CANAL && !tile.canalEra) || (this.state.era === ERA.RAIL && !tile.railEra)) { bump('目前時代不能蓋這個等級的板塊（需先發展）'); continue; }
+                    if (!isLoc && !anyOk && !this.state.isInNetwork(playerId, cityId)) { bump('產業牌只能蓋在你的網路內的城鎮'); continue; }
+                    const existing = farm ? this.state.breweryFarmTiles[cityId] : this.state.boardIndustries[`${cityId}_${slotIndex}`];
+                    if (existing) { bump('位置已被佔用（無法覆蓋）'); continue; }
+                    if (this.state.era === ERA.CANAL && !farm && (CITIES[cityId].slots || []).some((_, i) => this.state.boardIndustries[`${cityId}_${i}`]?.playerId === playerId)) { bump('運河時代每個城鎮只能蓋一個自己的板塊'); continue; }
+                    if (tile.cost > this.state.players[playerId].money) { bump('錢不夠'); continue; }
+                    if (!this.calculateBuildCost(playerId, type, cityId)) { bump(tile.costCoal > 0 ? '缺少可取得的煤（需連到煤源）或錢不夠買煤鐵' : '缺少鐵或錢不夠買鐵'); continue; }
+                    bump('格子優先規則：須先蓋只有單一圖示的格子');
+                }
+            });
+        }
+        const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+        return best ? best[0] : '沒有符合這張牌的格子';
+    }
+
     // Shared validation for one (location, slot, industry) build candidate.
     // Returns a target object or null.
     checkBuildTarget(playerId, cityId, slotIndex, indType, existing) {

@@ -261,6 +261,48 @@ async function load(url, errors, lang) {
             check('build: step bar now 棄一張牌', (gd.querySelector('.phase-step.active .phase-step-label') || {}).textContent === '棄一張牌');
             um.cancelAction(); um.selectedAction = saved.a; um.actionStep = saved.s; um.state.currentPlayerIndex = saved.cpi;
         }
+        // Card preview: tap a hand card -> legal spots for THAT card glow
+        {
+            const saved = { cpi: um.state.currentPlayerIndex };
+            um.state.currentPlayerIndex = um.state.turnOrder ? um.state.turnOrder.indexOf(um.myId) : um.myId;
+            um.cancelAction();
+            const sent = []; const origSend = um.net && um.net.send; if (um.net) um.net.send = m => { sent.push(m); return true; };
+            const before = JSON.stringify(um.state.players[um.myId]) + JSON.stringify(um.state.boardIndustries);
+            const key = e => e.dataset.farm ? e.dataset.farm + ':0' : e.dataset.city + ':' + e.dataset.slot;
+            const hand = um.state.players[um.myId].hand;
+            let okAll = true, detail = '', sawSome = false;
+            for (let i = 0; i < hand.length; i++) {
+                gd.querySelectorAll('#player-hand .card')[i].click(); await sleep(20);
+                const legal = um.logic.getBuildTargetsForCard(um.myId, i);
+                const want = new Set(legal.map(t => t.cityId + ':' + t.slotIndex));
+                const got = new Set([...gd.querySelectorAll('#game-board .highlight-slot')].map(key));
+                const hint = gd.getElementById('card-preview-hint').textContent;
+                const ok = want.size === got.size && [...want].every(k => got.has(k)) &&
+                    (legal.length ? hint.includes('這張牌可以蓋在亮起來的地方') && hint.includes(`${want.size} 個位置`) : /這張牌目前沒有可蓋的位置（.+）/.test(hint));
+                if (legal.length) sawSome = true;
+                if (!ok) { okAll = false; detail += ` card${i}(${hand[i].type}): ${[...want]} vs ${[...got]} / ${hint}`; }
+                check(`card preview ${i}: card marked selected`, gd.querySelectorAll('#player-hand .card')[i].classList.contains('previewing'));
+            }
+            check('card preview: highlighted slots == rules legal set for each card + hint', okAll, detail);
+            check('card preview: at least one card has legal spots', sawSome);
+            const last = hand.length - 1;
+            gd.querySelectorAll('#player-hand .card')[last].click(); await sleep(20);
+            check('card preview: tapping same card again deselects', um.previewCard == null && !gd.querySelector('#game-board .highlight-slot') && gd.getElementById('card-preview-hint').classList.contains('hidden'));
+            check('card preview: sent nothing, state unchanged', sent.length === 0 && before === JSON.stringify(um.state.players[um.myId]) + JSON.stringify(um.state.boardIndustries));
+            const ci = hand.findIndex((_, i) => um.logic.getBuildTargetsForCard(um.myId, i).length);
+            if (ci >= 0) {
+                gd.querySelectorAll('#player-hand .card')[ci].click(); await sleep(20);
+                const el = gd.querySelector('#game-board .highlight-slot');
+                el.dispatchEvent(new g.window.MouseEvent('click', { bubbles: true })); await sleep(30);
+                const conf = gd.querySelector('#build-panel .bp-confirm, #build-panel .bp-industry');
+                check('card preview: tap glowing spot -> build confirm bar', um.selectedAction === 'build' && !!conf, conf && conf.textContent);
+                const okBtn = gd.querySelector('#build-panel [data-bp="ok"]');
+                if (okBtn) { okBtn.click(); await sleep(30);
+                    check('card preview: 確認 sends build with the previewed card', sent.length === 1 && sent[0].action === 'build' && sent[0].cardIndex === ci, JSON.stringify(sent)); }
+            }
+            if (um.net) um.net.send = origSend;
+            um.waiting = false; um.cancelAction(); um.state.currentPlayerIndex = saved.cpi;
+        }
         check('no JS errors on game page', errors.length === 0, '\n  ' + errors.join('\n  '));
 
         // 2b) Invalid token -> only the error page

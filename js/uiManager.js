@@ -70,7 +70,9 @@ class UIManager {
         }
 
         document.getElementById('game-screen').classList.toggle('not-my-turn', !this.isMyTurn());
+        if (this.previewCard != null && this.selectedAction) this.clearCardPreview();
         this.refresh();
+        if (this.previewCard != null) this.showCardPreview();
         this.renderLog();
 
         if (!firstTime && prevPlayer !== st.currentPlayerId && !st.gameOver) {
@@ -104,6 +106,8 @@ class UIManager {
             return;
         }
         this.waiting = true;
+        this.clearCardPreview();
+        this.buildCardFromPreview = null;
         this.selectedAction = null;
         this.actionStep = 0;
         this.pendingData = {};
@@ -183,6 +187,7 @@ class UIManager {
     updateBuildHints() {
         if (!this.renderer) return;
         const on = this.buildHintsOn !== false;
+        if (this.previewCard != null) { this.renderer.clearBuildHints(); return; }
         if (!on || !this.isMyTurn() || this.selectedAction) { this.renderer.clearBuildHints(); return; }
         let targets = [];
         try { targets = this.logic.getValidBuildTargets(this.myId); } catch (e) { targets = []; }
@@ -280,7 +285,8 @@ class UIManager {
                     ? ''
                     : `<span class="card-art-label">${card.name || (card.type === CARD_TYPES.WILD_LOCATION ? 'Wild Location' : 'Wild Industry')}</span>`;
                 cardEl.innerHTML = `<img src="${art}" alt="${card.type === CARD_TYPES.LOCATION ? card.name || '' : ''}" draggable="false">${artLabel}`;
-                if (this.selectedCard === idx) cardEl.classList.add('selected');
+                if (this.selectedCard === idx || this.previewCard === idx) cardEl.classList.add('selected');
+                if (this.previewCard === idx) cardEl.classList.add('previewing');
                 if (this.selectedAction === ACTIONS.SCOUT &&
                         this.pendingData.scoutCards && this.pendingData.scoutCards.includes(idx)) {
                     cardEl.classList.add('scout-queued');
@@ -348,9 +354,10 @@ class UIManager {
                 `;
             }
 
-            if (this.selectedCard === idx) {
+            if (this.selectedCard === idx || this.previewCard === idx) {
                 cardEl.classList.add('selected');
             }
+            if (this.previewCard === idx) cardEl.classList.add('previewing');
 
             // Mark cards already queued for scout discard
             if (this.selectedAction === ACTIONS.SCOUT &&
@@ -737,6 +744,8 @@ class UIManager {
     // ========================================================================
 
     onCardClicked(index) {
+        // No action chosen: tapping a card previews where it can be built.
+        if (!this.selectedAction) { this.toggleCardPreview(index); return; }
         if (!this.isMyTurn()) return;
         if (this.selectedCard === index) {
             this.selectedCard = null;
@@ -752,6 +761,87 @@ class UIManager {
     }
 
     // ========================================================================
+    // Card preview: tap a hand card -> light up where it can be built.
+    // Read-only: never sends to the server and never mutates game state.
+    // ========================================================================
+
+    toggleCardPreview(index) {
+        if (this.previewCard === index) { this.clearCardPreview(); this.updateHand(); this.updateBuildHints(); return; }
+        this.previewCard = index;
+        this.updateHand();
+        this.showCardPreview();
+    }
+
+    showCardPreview() {
+        const idx = this.previewCard;
+        const hand = this.myId !== null && this.state.players[this.myId]?.hand;
+        if (idx == null || !hand || !hand[idx]) { this.clearCardPreview(); return; }
+        let targets = [];
+        try { targets = this.logic.getBuildTargetsForCard(this.myId, idx); } catch (e) { targets = []; }
+        this.previewTargets = targets;
+        this.renderer.clearBuildHints();
+        this.renderer.highlightSlots(targets);
+        if (targets.length) this.renderer.showBuildFocus?.(targets); else this.renderer.clearBuildFocus?.();
+        this.renderer.svg?.classList.add('build-select-mode', 'card-preview-mode');
+        let el = document.getElementById('card-preview-hint');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'card-preview-hint';
+            el.setAttribute('data-no-i18n', '');
+            (document.getElementById('game-screen') || document.body).appendChild(el);
+        }
+        el.classList.remove('hidden');
+        let msg;
+        if (targets.length) {
+            const spots = new Set(targets.map(t => `${t.cityId}|${t.slotIndex}`)).size;
+            const towns = new Set(targets.map(t => t.cityId)).size;
+            msg = this.bL(`這張牌可以蓋在亮起來的地方（${towns} 個城鎮、${spots} 個位置）`, `This card can build on the glowing spots (${towns} towns, ${spots} spots)`) +
+                (this.isMyTurn() ? this.bL('，點格子即可建造', ' — tap a spot to build') : this.bL('（輪到你時才能建造）', ' (build on your turn)'));
+            el.className = 'cp-ok';
+        } else {
+            let why = '';
+            try { why = this.logic.explainNoBuildForCard(this.myId, idx); } catch (e) { why = ''; }
+            msg = this.bL(`這張牌目前沒有可蓋的位置（${why}）`, `No legal build spot for this card now (${why})`);
+            el.className = 'cp-none';
+        }
+        el.innerHTML = `<span class="cp-text">${this.bEsc(msg)}</span><button class="btn-small" data-cp="close">${this.bL('取消', 'Close')}</button>`;
+        el.querySelector('[data-cp="close"]').addEventListener('click', () => { this.clearCardPreview(); this.updateHand(); this.updateBuildHints(); });
+    }
+
+    clearCardPreview() {
+        const had = this.previewCard != null;
+        this.previewCard = null;
+        this.previewTargets = null;
+        document.getElementById('card-preview-hint')?.classList.add('hidden');
+        if (had && this.renderer) {
+            this.renderer.clearHighlights();
+            this.renderer.svg?.classList.remove('build-select-mode', 'card-preview-mode');
+        }
+    }
+
+    // Tapped a glowing slot while previewing a card: jump into the build flow
+    // (confirm bar), remembering which card pays for it.
+    buildFromPreview(cityId, slotIndex) {
+        const idx = this.previewCard;
+        const targets = this.logic.getBuildTargetsForCard(this.myId, idx);
+        const here = targets.filter(t => t.cityId === cityId && t.slotIndex === slotIndex);
+        if (!here.length) return;
+        this.clearCardPreview();
+        this.selectedAction = ACTIONS.BUILD;
+        this.actionStep = 0;
+        this.selectedCard = null;
+        this.buildCardFromPreview = idx;
+        this.pendingData = { buildTargets: here.length > 1 ? here : targets, buildIndustry: here[0].industryType };
+        this.updateActionButtons();
+        this.updateHand();
+        if (here.length > 1) { this.showBuildIndustryPicker(here); return; }
+        this.renderer.showBuildFocus?.(targets.filter(t => t.industryType === here[0].industryType), here[0]);
+        this.renderer.svg?.classList.add('build-select-mode');
+        this.selectBuildSlot(cityId, slotIndex);
+        this.updatePhaseBar();
+    }
+
+    // ========================================================================
     // Action Selection
     // ========================================================================
 
@@ -762,6 +852,8 @@ class UIManager {
             return;
         }
 
+        this.clearCardPreview();
+        this.buildCardFromPreview = null;
         this.selectedAction = action;
         this.actionStep = 0;
         this.pendingData = {};
@@ -773,6 +865,8 @@ class UIManager {
     }
 
     cancelAction() {
+        this.clearCardPreview();
+        this.buildCardFromPreview = null;
         this.selectedAction = null;
         this.actionStep = 0;
         this.pendingData = {};
@@ -984,6 +1078,13 @@ class UIManager {
         this.actionStep = 1;
         this.updatePhaseBar();
         this.updateHand();
+        // Came from a card preview: that card pays for the build.
+        const ci = this.buildCardFromPreview;
+        this.buildCardFromPreview = null;
+        if (ci != null && this.logic.getValidCardsForAction(this.myId, ACTIONS.BUILD, this.pendingData).includes(ci)) {
+            this.selectedCard = ci;
+            this.processActionStep();
+        }
     }
 
     // Legacy entry point (kept for callers): now opens the grouped slot list.
@@ -1406,6 +1507,14 @@ class UIManager {
         if (!this.isMyTurn()) return;
         const target = e.target.closest('.industry-slot, .connection-line, .brewery-farm, .merchant-group');
         if (!target) return;
+
+        if (!this.selectedAction && this.previewCard != null) {
+            const farm = target.closest('.brewery-farm');
+            if (farm && farm.classList.contains('highlight-slot')) { this.buildFromPreview(farm.dataset.farm, 0); return; }
+            const slot = target.closest('.industry-slot');
+            if (slot && slot.classList.contains('highlight-slot')) this.buildFromPreview(slot.dataset.city, parseInt(slot.dataset.slot));
+            return;
+        }
 
         if (this.selectedAction === ACTIONS.BUILD && this.actionStep === 0) {
             if (!this.pendingData.buildIndustry) return; // choose the industry first

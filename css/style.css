@@ -2406,3 +2406,16 @@ body.fatal-only #game-screen { display: none !important; }
 .merchant-group { cursor: pointer; }
 .sell-merchants { color: #ffd36a; }
 @media (max-width: 760px) { .merch-row { font-size: 14px; } .merch-badge { font-size: 13px; } }
+
+/* Card preview: tap a hand card -> its legal build spots glow */
+#card-preview-hint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 950; max-width: min(560px, 94vw);
+    display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 10px; font-size: 14px; line-height: 1.35;
+    background: rgba(20,40,26,.96); border: 2px solid #7dffb0; color: #eafff1; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+#card-preview-hint.cp-none { background: rgba(48,24,18,.96); border-color: #ff9a6b; color: #ffe6dc; }
+#card-preview-hint.hidden { display: none; }
+#card-preview-hint .cp-text { flex: 1; }
+#card-preview-hint button { min-height: 32px; }
+#game-board.card-preview-mode .highlight-slot { animation: cp-glow 1.1s ease-in-out infinite alternate; }
+@keyframes cp-glow { from { filter: drop-shadow(0 0 2px #ffd36e); } to { filter: drop-shadow(0 0 9px #ffd36e); } }
+.card.previewing { outline: 3px solid #7dffb0; outline-offset: 2px; transform: translateY(-8px); }
+@media (max-width: 760px) { #card-preview-hint { top: 6px; font-size: 13px; padding: 6px 8px; } }

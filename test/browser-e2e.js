@@ -35,6 +35,17 @@ const sellUrl = room((r, s) => {
     s.boardIndustries.birmingham_1 = t(1, 'brewery', 1, 1); // opponent beer, connected via Oxford
     s.merchantTiles.forEach(m => m.hasBeer = false);
 });
+const cardUrl = room((r, s) => {
+    s.ironMarket = 8;
+    s.players[0].hand = [
+        { type: 'location', location: 'coventry', name: 'Coventry', uid: 'c1' },
+        { type: 'industry', industryTypes: ['ironWorks'], name: 'Iron Works', uid: 'c2' },
+        { type: 'wildLocation', uid: 'c3' },
+        { type: 'industry', industryTypes: ['brewery'], name: 'Brewery', uid: 'c4' },
+    ];
+    s.boardIndustries.redditch_0 = { playerId: 0, type: 'coalMine', tileData: { ...s.players[0].industryTiles.coalMine.find(x => x.level === 1) }, flipped: false, resourceCubes: 2 };
+    s.players[0].money = 12; // limited money -> mixed legal sets
+});
 
 const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, DATA_DIR: DIR }, stdio: ['ignore', 'pipe', 'inherit'] });
 const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(String(d))) res(); }));
@@ -116,6 +127,43 @@ const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(St
             await page.evaluate(() => window.scrollTo(0, 0));
             for (let k = 0; k < 2; k++) { await page.evaluate(() => [...document.querySelectorAll('.board-zoom button')][0].click()); await sleep(250); }
             await page.screenshot({ path: path.join(MS, 'mobile-map-zoomed.png') });
+        }
+        // ---- Card preview on mobile: tap a hand card -> its legal spots glow
+        {
+            const CS = process.env.CARD_SHOTS || '/workspace/card-shots';
+            fs.mkdirSync(CS, { recursive: true });
+            await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+            await page.goto(cardUrl); await waitUi(); await sleep(800);
+            const n = await page.$$eval('#player-hand .card', e => e.length);
+            for (let i = 0; i < n; i++) {
+                await page.tap(`#player-hand .card:nth-child(${i + 1})`); await sleep(300);
+                const r = await page.evaluate(i => {
+                    const um = window.uiManager;
+                    const want = [...new Set(um.logic.getBuildTargetsForCard(um.myId, i).map(t => t.cityId + ':' + t.slotIndex))].sort();
+                    const got = [...new Set([...document.querySelectorAll('#game-board .highlight-slot')].map(e => e.dataset.farm ? e.dataset.farm + ':0' : e.dataset.city + ':' + e.dataset.slot))].sort();
+                    return { want, got, hint: document.getElementById('card-preview-hint').textContent, type: um.state.players[um.myId].hand[i].type };
+                }, i);
+                console.log(`CARD ${i} ${r.type}: ${r.want.length} spots; hint: ${r.hint}`);
+                check(`mobile card ${i}: glowing slots == rules legal set`, JSON.stringify(r.want) === JSON.stringify(r.got), r.want + ' vs ' + r.got);
+                check(`mobile card ${i}: hint text`, r.want.length ? /這張牌可以蓋在亮起來的地方/.test(r.hint) : /這張牌目前沒有可蓋的位置（.+）/.test(r.hint), r.hint);
+                await page.screenshot({ path: path.join(CS, `card-${i}-${r.type}.png`) });
+                await page.tap(`#player-hand .card:nth-child(${i + 1})`); await sleep(200);
+                check(`mobile card ${i}: tap again deselects`, await page.evaluate(() => window.uiManager.previewCard == null && !document.querySelector('#game-board .highlight-slot')));
+            }
+            // Location card (Coventry) -> tap glowing slot -> confirm -> server builds
+            await page.tap('#player-hand .card:nth-child(1)'); await sleep(300);
+            const slotKey = await page.evaluate(() => { const um = window.uiManager; const t = um.logic.getBuildTargetsForCard(um.myId, 0)[0]; return t && { c: t.cityId, s: t.slotIndex, ty: t.industryType }; });
+            if (slotKey) {
+                await page.evaluate(k => document.querySelector(`#game-board .industry-slot[data-city="${k.c}"][data-slot="${k.s}"]`).dispatchEvent(new MouseEvent('click', { bubbles: true })), slotKey);
+                await sleep(400);
+                await page.screenshot({ path: path.join(CS, 'card-confirm-bar.png') });
+                const hasOk = await page.$('#build-panel [data-bp="ok"]');
+                check('mobile: tap glowing spot opens build confirm bar', !!hasOk);
+                if (hasOk) { await page.tap('#build-panel [data-bp="ok"]'); await page.waitForFunction(() => !window.uiManager.waiting, { timeout: 5000 }); await sleep(600); }
+                const built = await page.evaluate(k => window.uiManager.state.boardIndustries[k.c + '_' + k.s], slotKey);
+                check('mobile: server accepted build paid by the previewed card', built && built.playerId === 0 && built.type === slotKey.ty, JSON.stringify(built));
+                await page.screenshot({ path: path.join(CS, 'card-built.png') });
+            } else check('mobile: Coventry location card has a legal spot', false);
         }
         check('no page errors', errs.length === 0, errs.join('\n'));
     } finally { await browser.close(); srv.kill('SIGTERM'); }
