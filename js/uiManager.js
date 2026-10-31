@@ -572,9 +572,11 @@ class UIManager {
             if (lbl && lbl.dataset.en !== want) { lbl.dataset.en = want; lbl.textContent = want; }
             const num = step.querySelector('.phase-step-num');
             if (num) num.textContent = (noTarget && n === 3) ? '2' : String(n);
-            step.classList.toggle('hidden', noTarget && n === 2);
+            const hide = noTarget && n === 2;
+            step.classList.toggle('hidden', hide);
+            step.style.display = hide ? 'none' : '';
         });
-        if (arrows[1]) arrows[1].classList.toggle('hidden', noTarget);
+        if (arrows[1]) { arrows[1].classList.toggle('hidden', noTarget); arrows[1].style.display = noTarget ? 'none' : ''; }
 
         steps.forEach(step => {
             const stepNum = parseInt(step.dataset.step);
@@ -664,10 +666,12 @@ class UIManager {
 
         overlay.classList.remove('hidden', 'fade-out');
 
-        // Auto-dismiss after 1.5s
-        setTimeout(() => {
+        // Auto-dismiss after 1.5s. Cancel timers from a previous transition so
+        // rapid turn changes (AI turns) cannot hide/fade the new one early.
+        clearTimeout(this._ttFade); clearTimeout(this._ttHide);
+        this._ttFade = setTimeout(() => {
             overlay.classList.add('fade-out');
-            setTimeout(() => {
+            this._ttHide = setTimeout(() => {
                 overlay.classList.add('hidden');
                 overlay.classList.remove('fade-out');
             }, 500);
@@ -963,15 +967,22 @@ class UIManager {
         });
     }
 
+    // Options for the 2nd develop tile, computed as if the 1st tile were
+    // already removed: for the same industry this is the tile *after* the one
+    // just chosen (e.g. 鐵廠 Lv1 -> 鐵廠 Lv2), and it must itself be developable.
+    getDevelopSecondOptions(playerId, firstType) {
+        const player = this.state.players[playerId];
+        const out = [];
+        for (const [type, tiles] of Object.entries(player.industryTiles)) {
+            const unused = tiles.filter(t => !t.used);
+            const next = type === firstType ? unused[1] : unused[0];
+            if (next && next.canDevelop) out.push({ type, tile: next, level: next.level });
+        }
+        return out;
+    }
+
     showDevelopSecondChoice(playerId, firstType) {
-        const types = this.logic.getDevelopableTypes(playerId);
-        const remainingTypes = types.filter(t => {
-            if (t.type === firstType) {
-                const remaining = this.state.getRemainingTiles(playerId);
-                return remaining[t.type].count > 1;
-            }
-            return true;
-        });
+        const remainingTypes = this.getDevelopSecondOptions(playerId, firstType);
 
         const ironSources = this.state.findIronSource(playerId);
         const canAffordTwo = ironSources.length >= 2;

@@ -121,6 +121,11 @@
         'passed': '跳過', 'scouted (gained wild cards)': '偵察（獲得萬用牌）', 'took £30 loan': '借款 £30',
         'Canal & Rail': '運河與鐵路時代', 'Canal only': '僅運河時代', 'Rail only': '僅鐵路時代',
         'Used': '已使用', 'Available': '可用',
+        'Cannot afford both links': '錢不夠建造兩條連線', 'Cannot develop that second tile': '無法發展第二個板塊',
+        'First link is not adjacent to your network': '第一條連線未與你的網路相鄰',
+        'Second link is not adjacent to your network': '第二條連線未與你的網路相鄰',
+        'No beer available for the second link': '第二條連線沒有可用的啤酒',
+        'No coal for first link': '第一條連線沒有可用的煤', 'No coal for second link': '第二條連線沒有可用的煤',
     };
 
     const IND = [
@@ -139,7 +144,7 @@
         [/^(-?\d+) cds$/, (m, n) => `${n} 張`],
         [/^(-?\d+) lnk$/, (m, n) => `${n} 連線`],
         [/^Select (\d+) cards? to discard$/, (m, n) => `選擇 ${n} 張牌棄掉`],
-        [/^(.+) Lv(\d)$/, (m, a, l) => `${tr(a) || indName(a)} 等級${l}`],
+        [/^([A-Za-z /()]+) Lv(\d)$/, (m, a, l) => `${tr(a) || indName(a)} 等級${l}`],
         [/^(.+) \(Slot (\d+)\)$/, (m, c, n) => `${c}（第 ${n} 格）`],
         [/^(Cotton|Coal|Iron|Goods|Pottery|Beer) \((\d+)\)$/, (m, a, n) => `${tr(a)} (${n})`],
         [/^(.+)'s turn$/, (m, n) => `輪到 ${n}`],
@@ -156,6 +161,12 @@
     const F = [
         [/^[Bb]uilt (canal|rail) link: /, (m, t) => `建造了${t === 'canal' ? '運河' : '鐵路'}連線：`],
         [/^[Bb]uilt 2 rail links: /, () => '建造了 2 條鐵路連線：'],
+        // Sell lines must run before the generic ' Lv' rule.
+        [/[Ss]old (.+?) Lv(\d)(?= for £)/g, (m, i, l) => `賣掉 ${indName(i)} 等級${l}`],
+        [/[Ss]old (.+?) Lv(\d)/g, (m, i, l) => `賣出了 ${indName(i)} 等級${l}`],
+        [/, (?=賣出了 )/g, () => '；'],
+        [/ \[([^\]]+)\]/g, (m, inner) => `，獲得商人獎勵 ${inner.split('; ').join('、')}`],
+        [/\+£(\d+) \((.+?)\)/g, (m, n, w) => `+£${n}（${w}）`],
         [/ Lv(\d)/g, (m, l) => ` 等級${l}`],
         [/ \(1 beer consumed\)/, () => '（消耗 1 啤酒）'],
         [/^[Bb]uilt (.+?) Level (\d) in (.+?)(?= —|$)/, (m, i, l, c) => `在 ${c} 建造了 ${indName(i)} 等級${l}`],
@@ -168,7 +179,7 @@
         [/\+(\d+) income spaces \((.+?)\)/g, (m, n, w) => `+${n} 收入格（${w}）`],
         [/\+(\d+) VP \((.+?)\)/g, (m, n, w) => `+${n} 勝利點（${w}）`],
         [/^used merchant bonus: developed /, () => '使用商人獎勵：發展了 '],
-        [/^sold (.+?) for £(\d+) to cover income shortfall/, (m, i, p) => `為補足收入缺口賣掉 ${i}，得 £${p}`],
+        [/^賣掉 (.+?) for £(\d+) to cover income shortfall/, (m, i, p) => `為補足收入缺口賣掉 ${i}，得 £${p}`],
         [/^could not pay income shortfall — lost (\d+) VP/, (m, n) => `無法支付收入缺口，失去 ${n} 勝利點`],
         [/ and /g, () => ' 與 '],
         [/(\d+) coal\b/g, (m, n) => `${n} 煤`], [/(\d+) iron\b/g, (m, n) => `${n} 鐵`],

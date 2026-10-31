@@ -6,7 +6,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node test/rules-tests.js && node test/run-tests.js",
+    "test": "node test/rules-tests.js && node test/run-tests.js && node test/scoring-audit-tests.js",
     "test:dom": "node test/dom-smoke.js"
   },
   "engines": {

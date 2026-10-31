@@ -96,7 +96,52 @@ async function load(url, errors, lang) {
         check('build step bar: 選擇行動>選擇工業與地點>棄一張牌', lbls() === '選擇行動>選擇工業與地點>棄一張牌', lbls());
         um.selectedAction = 'loan'; um.actionStep = 1; um.updatePhaseBar(); await sleep(50);
         check('loan step bar has no 選擇目標 step', lbls() === '選擇行動>棄一張牌', lbls());
+        const vis = () => [...gd.querySelectorAll('.phase-step')].filter(x => g.window.getComputedStyle(x).display !== 'none');
+        const full = () => vis().map(x => x.querySelector('.phase-step-num').textContent + ' ' + x.querySelector('.phase-step-label').textContent).join(' ▶ ');
+        const expect = { build: '1 選擇行動 ▶ 2 選擇工業與地點 ▶ 3 棄一張牌', network: '1 選擇行動 ▶ 2 選擇連線 ▶ 3 棄一張牌', develop: '1 選擇行動 ▶ 2 選擇要發展的板塊 ▶ 3 棄一張牌', sell: '1 選擇行動 ▶ 2 選擇要販售的工業 ▶ 3 棄一張牌', loan: '1 選擇行動 ▶ 2 棄一張牌', pass: '1 選擇行動 ▶ 2 棄一張牌', scout: '1 選擇行動 ▶ 2 棄三張牌' };
+        for (const [a, want] of Object.entries(expect)) for (const st of [0, 1]) {
+            um.selectedAction = a; um.actionStep = st; um.pendingData = um.pendingData || {}; um.updatePhaseBar(); await sleep(30);
+            const nums = vis().map(x => x.querySelector('.phase-step-num').textContent);
+            check(`step bar ${a}/step${st}: ${want}`, full() === want && nums.every((n, i) => n === String(i + 1)), full());
+            const arrowsVis = [...gd.querySelectorAll('.phase-step-arrow')].filter(x => g.window.getComputedStyle(x).display !== 'none').length;
+            check(`step bar ${a}: arrows = steps-1`, arrowsVis === nums.length - 1, arrowsVis);
+        }
         um.selectedAction = null; um.actionStep = 0; um.updatePhaseBar();
+        // Turn banner must not intercept clicks on the action buttons.
+        um.showTurnTransition(um.state.players[0]);
+        check('turn banner has pointer-events:none', g.window.getComputedStyle(gd.getElementById('turn-transition')).pointerEvents === 'none');
+        const pb = gd.querySelector('.action-btn[data-action="pass"]');
+        const pbBefore = pb; um.updateActionButtons(); um.refresh();
+        check('跳過 button element is stable across re-render', gd.querySelector('.action-btn[data-action="pass"]') === pbBefore);
+        check('跳過 enabled iff it is my turn', pb.disabled === !um.isMyTurn(), pb.disabled + ' / ' + um.isMyTurn());
+        // 2-tile develop: second list is computed after removing the first tile.
+        {
+            const me = um.state.players[0];
+            const saved = JSON.stringify(me.industryTiles.ironWorks);
+            me.industryTiles.ironWorks.forEach(t => { t.used = false; });
+            const opts = um.getDevelopSecondOptions(0, 'ironWorks');
+            const iw = opts.find(o => o.type === 'ironWorks');
+            check('develop 2nd tile after 鐵廠 Lv1 offers 鐵廠 Lv2 (not Lv1)', iw && iw.level === 2, JSON.stringify(iw && iw.level));
+            const pot = me.industryTiles.pottery; const savedP = JSON.stringify(pot);
+            pot.forEach(t => { t.used = t.level === 1; });
+            check('develop 2nd tile after 陶器廠 Lv2 excludes lightbulb Lv3', !um.getDevelopSecondOptions(0, 'pottery').some(o => o.type === 'pottery'));
+            me.industryTiles.ironWorks = JSON.parse(saved); me.industryTiles.pottery = JSON.parse(savedP);
+        }
+        const T = g.window.I18N.t;
+        const logCases = {
+            'sold Cotton Mill Lv1 [+£5 (Warrington)]': '賣出了 棉紡廠 等級1，獲得商人獎勵 +£5（沃靈頓 Warrington）',
+            'sold Manufacturer Lv2 [+2 VP (Oxford)]': '賣出了 製造商 等級2，獲得商人獎勵 +2 勝利點（牛津 Oxford）',
+            'sold Pottery Lv1 [+2 income spaces (Shrewsbury)]': '賣出了 陶器廠 等級1，獲得商人獎勵 +2 收入格（什魯斯伯里 Shrewsbury）',
+            'sold Cotton Mill Lv1 [free develop earned (Gloucester)]': '賣出了 棉紡廠 等級1，獲得商人獎勵 獲得免費發展（格洛斯特 Gloucester）',
+            'sold Cotton Mill Lv1 [free develop: Iron Works]': '賣出了 棉紡廠 等級1，獲得商人獎勵 免費發展：鐵廠',
+            'sold Cotton Mill Lv1, sold Pottery Lv2': '賣出了 棉紡廠 等級1；賣出了 陶器廠 等級2',
+            'sold Coal Mine Lv1 for £4 to cover income shortfall': '為補足收入缺口賣掉 煤礦 等級1，得 £4',
+        };
+        for (const [en, zh] of Object.entries(logCases)) check(`log zh: ${en}`, T(en) === zh, T(en));
+        for (const en of ['developed Iron Works and Coal Mine', 'used merchant bonus: developed Iron Works', 'took £30 loan', 'passed',
+            'scouted (gained wild cards)', 'built canal link: Coventry - Nuneaton', 'Game started with 3 players', "Carol's turn",
+            'No coal for second link', 'Cannot afford both links', 'could not pay income shortfall — lost 3 VP'])
+            check(`log zh has no English words: ${en}`, !/[a-z]{3,}/.test(T(en).replace(/[A-Z][a-z]+/g, '')), T(en));
         const probe = gd.createElement('div'); probe.textContent = 'Built Coal Mine Level 1 in Coventry'; gd.getElementById('game-log').appendChild(probe);
         await sleep(50);
         check('town names shown as 考文垂 Coventry in HTML text', probe.textContent.includes('考文垂 Coventry'), probe.textContent);

@@ -2306,3 +2306,9 @@ body.fatal-only #game-screen { display: none !important; }
     color: #f0e6d2; font-size: 18px; line-height: 1; cursor: pointer; }
 /* Language toggle: in the top bar flow on the game screen so it never covers the log/board. */
 #top-bar .lang-toggle { position: static; margin-left: auto; opacity: 1; flex: none; }
+
+.phase-step.hidden, .phase-step-arrow.hidden { display: none !important; }
+
+/* The turn banner is informational only: never let it swallow clicks on the
+   action buttons (e.g. 跳過) while it is shown or fading out. */
+#turn-transition { pointer-events: none; }

@@ -701,6 +701,23 @@ class GameLogic {
         // industryType2 can be null for single develop
         const player = this.state.players[playerId];
 
+        // Each tile is removed separately and must be developable at the
+        // moment it is removed (e.g. Pottery L2 then the lightbulb Pottery L3
+        // is illegal). Validate both before consuming anything.
+        {
+            const next1 = this.state.getNextTile(playerId, industryType1);
+            if (!next1 || !next1.canDevelop) return { success: false, message: 'Cannot develop that industry' };
+            if (industryType2) {
+                let next2;
+                if (industryType2 === industryType1) {
+                    const rest = player.industryTiles[industryType1].filter(t => !t.used);
+                    next2 = rest[1];
+                } else {
+                    next2 = this.state.getNextTile(playerId, industryType2);
+                }
+                if (!next2 || !next2.canDevelop) return { success: false, message: 'Cannot develop that second tile' };
+            }
+        }
         // Validate iron availability and affordability before proceeding
         const tilesToDevelop = industryType2 ? 2 : 1;
         const ironSources = this.state.findIronSource(playerId);
@@ -835,6 +852,18 @@ class GameLogic {
 
             let beerRemaining = tile.tileData.beersToSell || 0;
             const notes = [];
+
+            // Verify the full beer requirement can be met BEFORE consuming
+            // anything (otherwise a merchant barrel + its bonus could be taken
+            // for a tile that then fails to sell).
+            if (beerRemaining > 0) {
+                const avail = this.state.findBeerSources(cityId, playerId, merchantIndices);
+                if (avail.length < beerRemaining) continue;
+                const breweryOnly = this.state.findBeerSources(cityId, playerId, null);
+                const merchantHas = merchantIndices.some(i => this.state.merchantTiles[i].hasBeer);
+                const needFromBreweries = beerRemaining - (entry.useMerchantBeer && merchantHas ? 1 : 0);
+                if (breweryOnly.length < needFromBreweries) continue;
+            }
 
             // Merchant beer first, if requested: pick the best-bonus merchant
             // with a barrel among those this tile is selling to
