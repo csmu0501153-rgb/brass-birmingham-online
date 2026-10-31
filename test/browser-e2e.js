@@ -83,6 +83,7 @@ const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(St
         const items = await page.$$eval('#modal-body .choice-item', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
         console.log('SELL dialog items:', items);
         check('UI sell: manufacturer offered with beer cost shown', items.length === 1 && /啤酒|Beer/.test(items[0]) && /1/.test(items[0]), items.join('|'));
+        check('UI sell: dialog says which merchant buys it', /賣給：牛津商人（全部/.test(items[0]) && /已用完/.test(items[0]), items[0]);
         await page.screenshot({ path: path.join(SHOTS, 'e2e-sell-dialog.png') });
         await page.click('#modal-body .choice-item'); await page.click('#confirm-sell'); await sleep(200);
         await page.click('#player-hand .card');
@@ -92,6 +93,30 @@ const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(St
         check('UI sell: manufacturer flipped', s2.tiles.redditch_0.f);
         check('UI sell: opponent brewery beer consumed', s2.tiles.birmingham_1.c === 0);
         check('UI sell: toast fully Chinese (no "Sold")', toasts.some(t => /賣出了? 製造商 等級1/.test(t)) && !toasts.some(t => /Sold/.test(t)), toasts.join('|'));
+        // ---- Mobile map screenshot: merchants + legend + popup
+        {
+            const MS = process.env.MERCHANT_SHOTS || '/workspace/merchant-shots';
+            fs.mkdirSync(MS, { recursive: true });
+            await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+            await page.goto(ironUrl); await waitUi(); await sleep(800);
+            await page.screenshot({ path: path.join(MS, 'mobile-map.png') });
+            await page.evaluate(() => { const b = document.querySelector('#board-container'); if (b) b.scrollTo(0, 0); window.uiManager.boardRenderer && 0; });
+            const n = await page.$$eval('#merchants-layer .merchant-goods', e => e.length);
+            check('mobile: merchant goods badges on map', n >= 5, n);
+            await page.evaluate(() => window.uiManager.showMerchantInfo('oxford')); await sleep(300);
+            const pop = await page.$eval('#modal-body', e => e.textContent);
+            check('mobile: merchant popup lists goods + bonus', /牛津商人/.test(pop) && /收入 \+2/.test(pop) && /全部/.test(pop), pop);
+            await page.screenshot({ path: path.join(MS, 'mobile-merchant-popup.png') });
+            await page.evaluate(() => { document.querySelector('.modal-close, #modal-close')?.click(); window.uiManager.hideModal && window.uiManager.hideModal(); });
+            await page.evaluate(() => document.getElementById('merchant-legend-panel').scrollIntoView());
+            await sleep(300);
+            await page.screenshot({ path: path.join(MS, 'mobile-merchant-legend.png') });
+            const zoomedClip = await page.evaluate(() => { const r = document.getElementById('game-board').getBoundingClientRect(); return { x: 0, y: Math.max(0, r.top + window.scrollY), width: Math.min(390, r.width), height: Math.min(600, r.height) }; });
+            void zoomedClip;
+            await page.evaluate(() => window.scrollTo(0, 0));
+            for (let k = 0; k < 2; k++) { await page.evaluate(() => [...document.querySelectorAll('.board-zoom button')][0].click()); await sleep(250); }
+            await page.screenshot({ path: path.join(MS, 'mobile-map-zoomed.png') });
+        }
         check('no page errors', errs.length === 0, errs.join('\n'));
     } finally { await browser.close(); srv.kill('SIGTERM'); }
     console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

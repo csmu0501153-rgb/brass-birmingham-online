@@ -92,6 +92,18 @@ async function load(url, errors, lang) {
         check('player panels show 行動中 / 等待中 labels', gd.getElementById('player-panels').textContent.includes('等待中') && gd.getElementById('player-panels').textContent.includes('行動中'));
         check('board zoom buttons present', gd.querySelectorAll('.board-zoom button').length === 3);
         {
+            const st = g.window.uiManager.state;
+            const rows = [...gd.querySelectorAll('#merchant-legend .merch-row')];
+            const act = Object.entries(g.window.eval('MERCHANTS')).filter(([, m]) => m.minPlayers <= st.numPlayers).map(([id]) => id);
+            check('merchant legend: one row per active merchant', rows.length === act.length, rows.length);
+            const shown = rows.flatMap(r => [...r.querySelectorAll('.merch-badge')].map(b => b.dataset.buys));
+            check('merchant legend shows CURRENT game tiles', JSON.stringify(shown) === JSON.stringify(act.flatMap(id => st.merchantTiles.filter(t => t.location === id).map(t => t.buys))), JSON.stringify(shown));
+            check('merchant legend Chinese bonus text', /牛津商人/.test(gd.getElementById('merchant-legend').textContent) && /收入 \+2/.test(gd.getElementById('merchant-legend').textContent) && /免費發展/.test(gd.getElementById('merchant-legend').textContent));
+            const badges = gd.querySelectorAll('#merchants-layer .merchant-goods');
+            check('map: a goods badge per merchant space', badges.length === st.merchantTiles.length, badges.length);
+            check('map: beer bonus pill per merchant', gd.querySelectorAll('#merchants-layer .merchant-bonus').length === act.length);
+        }
+        {
             const W = g.window;
             const labels = [...gd.querySelectorAll('#town-labels-layer .town-label')];
             const cityIds = Object.keys(W.eval('CITIES'));

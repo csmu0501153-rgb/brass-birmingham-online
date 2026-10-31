@@ -499,7 +499,45 @@ class UIManager {
         </svg>`;
     }
 
+    // Rows of { merchId, name, tiles:[{buys,hasBeer}], bonus } from the
+    // CURRENT game state (merchant tiles are dealt randomly at setup).
+    merchantSummary() {
+        const st = this.state || (this.game && this.game.state);
+        if (!st || !st.merchantTiles) return [];
+        const rows = [];
+        for (const [id, m] of Object.entries(MERCHANTS)) {
+            if (m.minPlayers > st.numPlayers) continue;
+            rows.push({ merchId: id, name: merchantNameZh(id), en: m.name,
+                tiles: st.merchantTiles.filter(t => t.location === id), bonus: merchantBonusZh(id) });
+        }
+        return rows;
+    }
+
+    merchantRowHTML(r) {
+        const badges = r.tiles.map(t => {
+            const i = MERCHANT_BUYS_ZH[t.buys] || MERCHANT_BUYS_ZH.blank;
+            const beer = t.buys === 'blank' ? '' : (t.hasBeer ? '🍺有啤酒' : '<s>🍺</s>已用完');
+            return `<span class="merch-badge" data-buys="${t.buys}" style="background:${i.color};color:${i.fg}">${i.name}</span><span class="merch-beer">${beer}</span>`;
+        }).join(' ');
+        return `<div class="merch-row" data-merchant="${r.merchId}"><div class="merch-name">${r.name}</div>
+            <div class="merch-goods">${badges}</div><div class="merch-bonus">啤酒獎勵：${r.bonus}</div></div>`;
+    }
+
+    updateMerchantLegend() {
+        const el = document.getElementById('merchant-legend');
+        if (!el) return;
+        el.innerHTML = this.merchantSummary().map(r => this.merchantRowHTML(r)).join('') +
+            '<div class="merch-note">商人板塊每局依人數隨機抽放。賣貨須連到收該貨的商人；用該商人的啤酒可得獎勵。</div>';
+    }
+
+    showMerchantInfo(merchId) {
+        const r = this.merchantSummary().find(x => x.merchId === merchId);
+        if (!r) return;
+        this.showModal(r.name, `<div class="merchant-legend-popup">${this.merchantRowHTML(r)}</div>`, () => {});
+    }
+
     updateMarkets() {
+        this.updateMerchantLegend();
         // Coal market
         const coalTrack = document.getElementById('coal-track');
         coalTrack.innerHTML = '';
@@ -1206,10 +1244,14 @@ class UIManager {
                         <div class="choice-item-name">${display.name} Lv${target.tile.tileData.level}</div>
                         <div class="choice-item-detail">${cityName} | VP: ${target.tile.tileData.vp} | Income: +${target.tile.tileData.income}
                         ${target.beerNeeded > 0 ? ` | Beer: ${target.beerNeeded}` : ''}</div>
+                        <div class="choice-item-detail sell-merchants">賣給：${target.merchantIndices.map(i => {
+                            const mt = this.state.merchantTiles[i];
+                            return `${merchantNameZh(mt.location)}（${MERCHANT_BUYS_ZH[mt.buys].name}）${mt.hasBeer ? `🍺有啤酒→${merchantBonusZh(mt.location)}` : '🍺已用完'}`;
+                        }).join('；')}</div>
                         ${offerMerchantBeer ? `
                         <label class="choice-item-detail" style="display:flex;align-items:center;gap:5px;margin-top:4px;cursor:pointer;">
                             <input type="checkbox" class="merchant-beer-cb" data-key="${target.key}" checked>
-                            Use merchant beer (claim bonus)
+                            使用商人啤酒（領取獎勵）
                         </label>` : ''}
                     </div>
                 </div>
@@ -1359,6 +1401,8 @@ class UIManager {
     // ========================================================================
 
     onBoardClick(e) {
+        const merchEl = e.target.closest && e.target.closest('.merchant-group');
+        if (merchEl && !this.selectedAction) { this.showMerchantInfo(merchEl.dataset.merchant); return; }
         if (!this.isMyTurn()) return;
         const target = e.target.closest('.industry-slot, .connection-line, .brewery-farm, .merchant-group');
         if (!target) return;

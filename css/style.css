@@ -2391,3 +2391,18 @@ body.fatal-only #game-screen { display: none !important; }
 #toggle-hints-btn { opacity: .7; }
 #toggle-hints-btn.on { opacity: 1; border-color: #7dffb0 !important; color: #c9ffe0 !important; }
 #link-picker.below-board { position: relative; left: auto; bottom: auto; transform: none; width: auto; margin: 4px 6px; order: 1; }
+
+/* Merchant legend: what each merchant buys this game */
+#merchant-legend-panel { padding: 8px 10px; }
+#merchant-legend-panel h3 { margin: 0 0 6px; font-size: 14px; }
+.merch-row { padding: 6px 0; border-bottom: 1px solid rgba(201,168,76,0.2); font-size: 13px; }
+.merch-name { font-weight: 700; color: #ffe8b0; }
+.merch-name small { color: #aaa; font-weight: 400; }
+.merch-goods { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 3px 0; }
+.merch-badge { padding: 2px 7px; border-radius: 10px; font-weight: 700; font-size: 12px; }
+.merch-beer { font-size: 11px; color: #e8d9a8; margin-right: 6px; }
+.merch-bonus { color: #ffd36a; font-size: 12px; }
+.merch-note { font-size: 11px; color: #aaa; margin-top: 6px; }
+.merchant-group { cursor: pointer; }
+.sell-merchants { color: #ffd36a; }
+@media (max-width: 760px) { .merch-row { font-size: 14px; } .merch-badge { font-size: 13px; } }

@@ -1137,6 +1137,40 @@ class BoardRenderer {
         }
     }
 
+    // Coloured badge on a merchant space: which goods this game's (randomly
+    // dealt) merchant tile buys — 棉 / 陶 / 製 / 全 / — .
+    drawMerchantGoodsBadge(g, cx, cy, S, SH, mt) {
+        const info = MERCHANT_BUYS_ZH[mt.buys] || MERCHANT_BUYS_ZH.blank;
+        const narrow = (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760;
+        const bw = S * (narrow ? 1.25 : 0.9), bh = SH * (narrow ? 0.85 : 0.6);
+        const b = this.createGroup({ class: 'merchant-goods', 'data-buys': mt.buys, 'pointer-events': 'none' });
+        b.appendChild(this.createElement('rect', { x: cx - bw / 2, y: cy - bh / 2 + SH * 0.12, width: bw, height: bh,
+            rx: 3, ry: 3, fill: info.color, stroke: '#1a1208', 'stroke-width': 0.9, opacity: mt.buys === 'blank' ? 0.75 : 0.95 }));
+        b.appendChild(this.text(info.short, { x: cx, y: cy + SH * 0.12, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+            'font-size': String(Math.round(bh * 0.8)), 'font-weight': '700', fill: info.fg }));
+        if (mt.buys !== 'blank' && !mt.hasBeer) {
+            b.appendChild(this.text('啤酒已用', { x: cx, y: cy - SH / 2 + 5, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                'font-size': '6', fill: '#ffb4a0' }));
+        }
+        g.appendChild(b);
+    }
+
+    // Beer bonus pill under the merchant's spaces.
+    drawMerchantBonusPill(g, merchId, spaces, anchor) {
+        const ys = spaces.map(sp => sp[1] * this.H - anchor.y), xs = spaces.map(sp => sp[0] * this.W - anchor.x);
+        const x = xs.reduce((a, b) => a + b, 0) / xs.length, y = Math.max(...ys) + this.citySlotH / 2 + 14;
+        const txt = '🍺 ' + merchantBonusZh(merchId);
+        const narrow = (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760;
+        const fs = narrow ? 17 : 11, ph = fs + 7;
+        const w = txt.length * fs * 0.95 + 12;
+        const p = this.createGroup({ class: 'merchant-bonus', 'pointer-events': 'none' });
+        p.appendChild(this.createElement('rect', { x: x - w / 2, y: y - ph / 2, width: w, height: ph, rx: ph / 2, ry: ph / 2,
+            fill: 'rgba(20,16,8,0.85)', stroke: '#d9b14e', 'stroke-width': 0.9 }));
+        p.appendChild(this.text(txt, { x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+            'font-size': String(fs), 'font-weight': '700', fill: '#ffe08a' }));
+        g.appendChild(p);
+    }
+
     drawMerchants() {
         const merchantGroup = this.createGroup({ id: 'merchants-layer' });
 
@@ -1171,10 +1205,12 @@ class BoardRenderer {
                         fill: 'rgba(0,0,0,0.10)',
                         stroke: 'rgba(217,177,78,0.3)', 'stroke-width': 0.9,
                     }));
+                    if (tiles[i]) this.drawMerchantGoodsBadge(g, cx, cy, S, SH, tiles[i]);
                     if (tiles[i] && tiles[i].hasBeer) {
                         this.drawBarrel(g, cx - S / 2 + 6, cy - SH / 2 + 6, true);
                     }
                 });
+                this.drawMerchantBonusPill(g, merchId, spaces, anchor);
                 merchantGroup.appendChild(g);
                 continue;
             }
@@ -1195,7 +1231,7 @@ class BoardRenderer {
                 fill: '#2a2620', stroke: '#8a7647', 'stroke-width': 0.9,
             }));
 
-            g.appendChild(this.text(merch.name.toUpperCase(), {
+            g.appendChild(this.text(merchantNameZh(merchId), {
                 x: 0, y: -1, class: 'merchant-label',
                 'font-size': merch.name.length > 10 ? '7' : '8',
                 'dominant-baseline': 'central',
@@ -1216,13 +1252,15 @@ class BoardRenderer {
                 this.drawBarrel(g, x0 + 12, cy, !!(mt && mt.hasBeer));
 
                 if (!mt) continue;
+                const sg = this.createGroup({ class: 'merchant-goods', 'data-buys': mt.buys });
+                g.appendChild(sg);
                 if (mt.buys === 'blank') {
-                    g.appendChild(this.text('—', {
+                    sg.appendChild(this.text('—', {
                         x: x0 + 34, y: cy, 'dominant-baseline': 'central',
                         'font-size': '9', fill: 'rgba(230,220,195,0.35)',
                     }));
                 } else if (mt.buys === 'any') {
-                    g.appendChild(this.text('ANY', {
+                    sg.appendChild(this.text('全部', {
                         x: x0 + 34, y: cy, 'dominant-baseline': 'central',
                         'font-family': 'Cinzel, serif', 'font-size': '8',
                         'letter-spacing': '1', fill: '#e2c98c',
@@ -1231,8 +1269,8 @@ class BoardRenderer {
                     const icon = this.getIndustryIcon(mt.buys, 15);
                     icon.setAttribute('transform', `translate(${x0 + 32}, ${cy})`);
                     icon.setAttribute('opacity', '0.85');
-                    g.appendChild(icon);
-                    g.appendChild(this.text(INDUSTRY_DISPLAY[mt.buys].shortName, {
+                    sg.appendChild(icon);
+                    sg.appendChild(this.text(MERCHANT_BUYS_ZH[mt.buys].name, {
                         x: x0 + 43, y: cy, 'dominant-baseline': 'central',
                         'font-size': '6.5', fill: 'rgba(235,225,200,0.75)',
                     }));
@@ -1240,18 +1278,15 @@ class BoardRenderer {
             }
 
             // Beer bonus, on a small brass plate at the foot.
-            let bonusStr = '';
-            if (merch.bonusType === 'vp') bonusStr = `+${merch.bonusAmount} VP`;
-            else if (merch.bonusType === 'money') bonusStr = `+£${merch.bonusAmount}`;
-            else if (merch.bonusType === 'income') bonusStr = `+${merch.bonusAmount} INCOME`;
-            else if (merch.bonusType === 'develop') bonusStr = 'FREE DEVELOP';
+            const bonusStr = '啤酒獎勵 ' + merchantBonusZh(merchId);
             if (bonusStr) {
-                g.appendChild(this.createElement('rect', {
+                const bg = this.createGroup({ class: 'merchant-bonus' }); g.appendChild(bg);
+                bg.appendChild(this.createElement('rect', {
                     x: x0 + 7, y: h - 20, width: w - 14, height: 12,
                     rx: 2, ry: 2, fill: '#14181f',
                     stroke: 'rgba(201,168,76,0.45)', 'stroke-width': 0.7,
                 }));
-                g.appendChild(this.text(bonusStr, {
+                bg.appendChild(this.text(bonusStr, {
                     x: 0, y: h - 14, 'text-anchor': 'middle', 'dominant-baseline': 'central',
                     'font-family': 'Cinzel, serif', 'font-size': '7',
                     'letter-spacing': '0.6', fill: '#e2c98c',

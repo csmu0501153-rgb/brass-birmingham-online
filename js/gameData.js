@@ -394,16 +394,17 @@ const MERCHANTS = {
 // barrel sits beside a blank tile).
 //
 //   2p (5): blank x2, any x1, cotton x1, manufacturer x1
-//   3p (7): 2p deck + pottery x1, manufacturer x1
-//   4p (9): 3p deck + any x1, cotton x1
+//   3p (7): 2p deck + blank x1, pottery x1
+//   4p (9): 3p deck + cotton x1, manufacturer x1
+//   (full set: 3 blank, 1 any, 1 pottery, 2 cotton, 2 manufacturer)
 const MERCHANT_TILE_MIX_2P = [
     'blank', 'blank', 'any', INDUSTRY_TYPES.COTTON_MILL, INDUSTRY_TYPES.MANUFACTURER,
 ];
 const MERCHANT_TILE_MIX_3P = [
-    ...MERCHANT_TILE_MIX_2P, INDUSTRY_TYPES.POTTERY, INDUSTRY_TYPES.MANUFACTURER,
+    ...MERCHANT_TILE_MIX_2P, 'blank', INDUSTRY_TYPES.POTTERY,
 ];
 const MERCHANT_TILE_MIX_4P = [
-    ...MERCHANT_TILE_MIX_3P, 'any', INDUSTRY_TYPES.COTTON_MILL,
+    ...MERCHANT_TILE_MIX_3P, INDUSTRY_TYPES.COTTON_MILL, INDUSTRY_TYPES.MANUFACTURER,
 ];
 const MERCHANT_TILE_MIX = {
     2: MERCHANT_TILE_MIX_2P,
@@ -608,6 +609,29 @@ function getLocationPosition(locationId) {
     if (locationId === 'northern') return { x: BREWERY_FARMS.northern.x, y: BREWERY_FARMS.northern.y };
     if (locationId === 'southern') return { x: BREWERY_FARMS.southern.x, y: BREWERY_FARMS.southern.y };
     return null;
+}
+
+// Chinese display helpers for merchants (used by the map, legend and Sell dialog).
+const MERCHANT_ZH = { shrewsbury: '舒茲伯利', gloucester: '格洛斯特', oxford: '牛津', warrington: '沃靈頓', nottingham: '諾丁漢' };
+const MERCHANT_BUYS_ZH = {
+    cottonMill: { short: '棉', name: '棉紡廠', color: '#e8d5b7', fg: '#2b2014' },
+    pottery: { short: '陶', name: '陶瓷廠', color: '#c0392b', fg: '#fff' },
+    manufacturer: { short: '製', name: '製造商', color: '#8b6914', fg: '#fff' },
+    any: { short: '全', name: '全部（棉/陶/製）', color: '#2e7d4f', fg: '#fff' },
+    blank: { short: '—', name: '不收貨（空白）', color: '#555', fg: '#ccc' },
+};
+function merchantBonusZh(merchId) {
+    const m = MERCHANTS[merchId]; if (!m) return '';
+    if (m.bonusType === 'vp') return `+${m.bonusAmount} 分`;
+    if (m.bonusType === 'money') return `+£${m.bonusAmount}`;
+    if (m.bonusType === 'income') return `收入 +${m.bonusAmount}`;
+    if (m.bonusType === 'develop') return '免費發展 1 次';
+    return '';
+}
+function merchantNameZh(merchId) {
+    const en = MERCHANTS[merchId] ? MERCHANTS[merchId].name : merchId;
+    const zh = (typeof I18N !== 'undefined' && I18N.zhName) ? I18N.zhName(en) : null;
+    return ((zh && zh !== en) ? zh : (MERCHANT_ZH[merchId] || en)) + '商人';
 }
 
 function isMerchantLocation(locationId) {
