@@ -315,9 +315,15 @@ class GameLogic {
 
         const locName = isFarm ? BREWERY_FARMS[cityId].name : CITIES[cityId].name;
         let message = `Built ${INDUSTRY_DISPLAY[industryType].name} Level ${tileData.level} in ${locName}`;
+        const resName = industryType === INDUSTRY_TYPES.COAL_MINE ? 'coal' : 'iron';
         if (marketSale && marketSale.cubesMoved > 0) {
-            message += ` — sold ${marketSale.cubesMoved} to market for £${marketSale.moneyGained}`;
-            if (marketSale.flipped) message += ' (tile flipped!)';
+            message += ` — auto-sold ${marketSale.cubesMoved} ${resName} to market for £${marketSale.moneyGained}`;
+            if (marketSale.flipped) message += ` (tile flipped! +${tileData.income || 0} income)`;
+            else message += ` (${placedTile.resourceCubes} left on tile)`;
+        } else if (industryType === INDUSTRY_TYPES.COAL_MINE || industryType === INDUSTRY_TYPES.IRON_WORKS) {
+            message += industryType === INDUSTRY_TYPES.COAL_MINE && !marketSale
+                ? ' — not connected to a merchant, coal stays on tile'
+                : ' — market full, cubes stay on tile';
         }
         return { success: true, message };
     }

@@ -1405,7 +1405,7 @@ class UIManager {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.textContent = message;
+        toast.textContent = (window.I18N && window.I18N.t) ? window.I18N.t(message) : message;
         container.appendChild(toast);
 
         setTimeout(() => {
