@@ -6,7 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node test/rules-tests.js && node test/run-tests.js && node test/scoring-audit-tests.js && node test/market-autosell-tests.js",
+    "test": "node test/rules-tests.js && node test/run-tests.js && node test/scoring-audit-tests.js && node test/market-autosell-tests.js && node test/iron-build-room-tests.js && node test/ws-e2e.js",
+    "test:browser": "node test/browser-e2e.js",
     "test:dom": "node test/dom-smoke.js"
   },
   "engines": {

@@ -43,6 +43,11 @@ const tile=(g,city)=>g.boardIndustries[city+'_0'];
 if (I && (I.translateMessage||I.tr||I.translate)) {
   const f=I.translateMessage||I.tr||I.translate;
   const z=f('Built Coal Mine Level 1 in Birmingham — auto-sold 2 coal to market for £8 (tile flipped! +4 income)');
-  console.log('  ',z); check('zh: 煤礦自動賣出 2 塊煤', /煤礦自動賣出 2 塊煤到市場，獲得 £8（板塊翻面！收入 \+4）/.test(z));
+  console.log('  ',z); check('zh: 煤礦自動賣出 2 塊煤', /自動賣出 2 塊煤，收 £8（全部賣完，板塊翻面！收入 \+4）/.test(z));
+  for (const [en, re] of [
+    ['Built Iron Works Level 1 in Birmingham — auto-sold 2 iron to market for £2; market full, 2 left on tile', /自動賣出 2 塊鐵，收 £2；市場已滿，板塊上還剩 2 塊$/],
+    ['Built Iron Works Level 1 in Birmingham — iron market full: 0 sold, all 4 iron stay on tile', /鐵市場已滿：賣出 0 塊，4 塊鐵全部留在板塊上$/],
+    ['Built Coal Mine Level 1 in Redditch — not connected to a merchant: 0 sold, all 2 coal stay on tile', /未連到商人，煤不會自動賣出：賣出 0 塊，2 塊煤全部留在板塊上$/],
+    ['Sold Manufacturer Lv1', /^賣出了? 製造商 等級1$/]]) { const z2 = f(en); check('zh: ' + z2, re.test(z2), z2); }
 } else console.log('  (i18n not requireable; skipped)');
 console.log(`\n${pass} passed, ${fail} failed`); if(fail) process.exit(1);
