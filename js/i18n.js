@@ -306,7 +306,7 @@
         document.body.appendChild(btn);
     }
 
-    window.I18N = { townLabel, lang: () => lang, t: s => { const r = translateString(s); return r === null ? s : r; } };
+    window.I18N = { townLabel, TOWNS, zhName: n => TOWNS[n] || n, lang: () => lang, t: s => { const r = translateString(s); return r === null ? s : r; } };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();

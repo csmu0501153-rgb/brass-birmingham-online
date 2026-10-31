@@ -215,6 +215,7 @@ class BoardRenderer {
         this.drawMerchants();
         this.drawCities();
         this.drawBuiltLinks();
+        this.drawTownLabels();
         this.probeAsset();
         this.enableViewControls();
         this.applyView();
@@ -1329,138 +1330,124 @@ class BoardRenderer {
     // ========================================================================
 
     drawBuiltLinks() {
-        const linkGroup = this.createGroup({ id: 'built-links-layer' });
-
+        const linkGroup = this.createGroup({ id: 'built-links-layer', 'pointer-events': 'none' });
         if (!this.state) return;
+        const L = (seg, attrs) => linkGroup.appendChild(this.createElement('line', {
+            ...seg, 'stroke-linecap': 'round', class: 'connection-line built', ...attrs }));
 
-        for (const [connId, link] of Object.entries(this.state.boardLinks)) {
+        for (const [connId, link] of Object.entries(this.state.boardLinks || {})) {
             const conn = CONNECTIONS.find(c => c.id === connId);
             if (!conn) continue;
-
             const pos1 = this.pos(conn.cities[0]);
             const pos2 = this.pos(conn.cities[1]);
             if (!pos1 || !pos2) continue;
+            const playerColor = (this.state.players[link.playerId] || {}).color || '#fff';
+            const segs = [];
+            const bp = conn.viaBrewery ? this.pos(conn.viaBrewery) : null;
+            if (bp) { segs.push({ x1: pos1.x, y1: pos1.y, x2: bp.x, y2: bp.y }); segs.push({ x1: bp.x, y1: bp.y, x2: pos2.x, y2: pos2.y }); }
+            else segs.push({ x1: pos1.x, y1: pos1.y, x2: pos2.x, y2: pos2.y });
 
-            const playerColor = this.state.players[link.playerId].color;
-
-            // On a real board a link is a small tile laid along the printed
-            // route, not a stripe painted over it.
-            const linkArt = (this.assetURL && typeof BoardAssets !== 'undefined'
-                && BoardAssets.tilesReady()) ? BoardAssets.linkUrl(link.type) : null;
-            if (linkArt) {
-                const mids = [];
-                if (conn.viaBrewery) {
-                    const bp = this.pos(conn.viaBrewery);
-                    if (bp) {
-                        mids.push([pos1, bp]);
-                        mids.push([bp, pos2]);
-                    }
-                } else {
-                    mids.push([pos1, pos2]);
-                }
-                for (const [a, b] of mids) {
-                    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-                    const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-                    // 297x126 art; keep that ratio at roughly a city-slot's width.
-                    const w = this.citySlotSize * 1.05, h = w * (126 / 297);
-                    const g = this.createGroup({
-                        transform: `rotate(${angle.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)})`,
-                        filter: 'url(#tileShadow)',
-                        class: 'connection-line built',
-                    });
-                    g.appendChild(this.createElement('image', {
-                        x: mx - w / 2, y: my - h / 2, width: w, height: h,
-                        href: linkArt, preserveAspectRatio: 'none',
-                    }));
-                    g.appendChild(this.createElement('rect', {
-                        x: mx - w / 2 + 0.5, y: my - h / 2 + 0.5,
-                        width: w - 1, height: h - 1, rx: 1.5, ry: 1.5,
-                        fill: 'none', stroke: playerColor,
-                        'stroke-width': 1.8, 'stroke-opacity': 0.95,
-                    }));
-                    linkGroup.appendChild(g);
-                }
-                continue;
-            }
-
-            const drawBuiltSegment = (seg) => {
+            for (const seg of segs) {
+                // Soft glow in the owner's colour, then owner outline, then the link body.
+                L(seg, { stroke: playerColor, 'stroke-width': 22, 'stroke-opacity': '0.35', class: 'connection-line built link-glow' });
+                L(seg, { stroke: '#0b0d12', 'stroke-width': 17, 'stroke-opacity': '0.9' });
+                L(seg, { stroke: playerColor, 'stroke-width': 14 });
                 if (link.type === 'canal') {
-                    // Dug canal: dark cut, lit water, owner's colour as towpath.
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: '#1d3242', 'stroke-width': 10,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.9',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: '#3f6c8a', 'stroke-width': 6.5,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.95',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: '#8fc0da', 'stroke-width': 1.8,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.45',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: playerColor, 'stroke-width': 2.4,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.95',
-                        'stroke-dasharray': '7 4',
-                        class: 'connection-line built',
-                    }));
+                    L(seg, { stroke: '#1f7fd6', 'stroke-width': 8 });
+                    L(seg, { stroke: '#9fd4ff', 'stroke-width': 2, 'stroke-opacity': '0.8' });
                 } else {
-                    // Laid rail: ballast, owner's colour, sleeper ties, rail head.
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: '#241f1a', 'stroke-width': 9,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.92',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: playerColor, 'stroke-width': 5.2,
-                        'stroke-linecap': 'round', 'stroke-opacity': '0.95',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: 'rgba(18,14,8,0.6)', 'stroke-width': 5.2,
-                        'stroke-linecap': 'butt', 'stroke-dasharray': '1.6 4.5',
-                        class: 'connection-line built',
-                    }));
-                    linkGroup.appendChild(this.createElement('line', {
-                        ...seg, stroke: 'rgba(222,212,188,0.55)', 'stroke-width': 0.9,
-                        'stroke-linecap': 'round',
-                        class: 'connection-line built',
-                    }));
+                    L(seg, { stroke: '#151515', 'stroke-width': 8 });
+                    L(seg, { stroke: '#e8e0cc', 'stroke-width': 8, 'stroke-linecap': 'butt', 'stroke-dasharray': '2 6' });
                 }
-            };
-
-            if (conn.viaBrewery) {
-                const brewPos = this.pos(conn.viaBrewery);
-                if (brewPos) {
-                    drawBuiltSegment({ x1: pos1.x, y1: pos1.y, x2: brewPos.x, y2: brewPos.y });
-                    drawBuiltSegment({ x1: brewPos.x, y1: brewPos.y, x2: pos2.x, y2: pos2.y });
-                }
-            } else {
-                drawBuiltSegment({ x1: pos1.x, y1: pos1.y, x2: pos2.x, y2: pos2.y });
             }
-
-            // Owner badge at the midpoint.
-            const midX = (pos1.x + pos2.x) / 2;
-            const midY = (pos1.y + pos2.y) / 2;
-
-            linkGroup.appendChild(this.createElement('circle', {
-                cx: midX, cy: midY + 1, r: 6, fill: 'rgba(4,6,10,0.5)',
-            }));
-            linkGroup.appendChild(this.createElement('circle', {
-                cx: midX, cy: midY, r: 6, fill: playerColor,
-                stroke: '#14110c', 'stroke-width': 1,
-            }));
+            const mx = (pos1.x + pos2.x) / 2, my = (pos1.y + pos2.y) / 2;
+            const at = bp ? bp : { x: mx, y: my };
+            linkGroup.appendChild(this.createElement('circle', { cx: at.x, cy: at.y, r: 8, fill: playerColor, stroke: '#0b0d12', 'stroke-width': 2 }));
             linkGroup.appendChild(this.text(link.type === 'canal' ? '≈' : '≡', {
-                x: midX, y: midY + 0.4, 'text-anchor': 'middle',
-                'dominant-baseline': 'central', 'font-size': '7.5',
-                'font-weight': '700', fill: '#fff', 'pointer-events': 'none',
+                x: at.x, y: at.y + 0.5, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                'font-size': '10', 'font-weight': '700', fill: '#fff', 'pointer-events': 'none',
             }));
+            linkGroup.lastChild.setAttribute('data-link', connId);
         }
-
         this.svg.appendChild(linkGroup);
+    }
+
+    // Chinese/English name pills over every town and merchant. Purely visual:
+    // pointer-events none so slots underneath stay tappable.
+    drawTownLabels() {
+        this.svg.querySelector('#town-labels-layer')?.remove();
+        const g = this.createGroup({ id: 'town-labels-layer', 'pointer-events': 'none' });
+        if (this.labelsHidden) g.setAttribute('display', 'none');
+        const zh = n => (typeof I18N !== 'undefined' && I18N.zhName) ? I18N.zhName(n) : n;
+        const narrow = (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760;
+        const big = narrow ? 21 : 15, small = narrow ? 11 : 8.5;
+        const add = (id, name, x, y, extra) => {
+            const zhText = zh(name) + (extra || '');
+            const w = Math.max(zhText.length * big * 0.98, name.length * small * 0.56) + 12;
+            const h = big + small + 7;
+            const lg = this.createGroup({ class: 'town-label', 'data-label': id, transform: `translate(${x.toFixed(1)},${y.toFixed(1)})` });
+            lg.appendChild(this.createElement('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: h / 2, ry: h / 2,
+                fill: 'rgba(10,12,18,0.72)', stroke: 'rgba(255,230,170,0.55)', 'stroke-width': 1 }));
+            lg.appendChild(this.text(zhText, { x: 0, y: -h / 2 + 2 + big * 0.85, 'text-anchor': 'middle',
+                'font-size': String(big), 'font-weight': '700', fill: '#fff7e2', class: 'town-label-zh' }));
+            lg.appendChild(this.text(name, { x: 0, y: h / 2 - 3, 'text-anchor': 'middle',
+                'font-size': String(small), fill: '#d8cfb8', class: 'town-label-en' }));
+            g.appendChild(lg);
+        };
+        const offY = this.assetURL ? -34 : -30;
+        for (const [id, c] of Object.entries(CITIES)) {
+            const p = this.pos(id); add(id, c.name, p.x, p.y + offY);
+        }
+        for (const [id, m] of Object.entries(MERCHANTS)) {
+            if (this.state && m.minPlayers > this.state.numPlayers) continue;
+            const p = this.pos(id); add(id, m.name, p.x, p.y - 30, '商人');
+        }
+        this.svg.appendChild(g);
+    }
+
+    // Idle-turn hint: soft glow on every slot where the player could build
+    // something now, with initials of the industries that fit there.
+    showBuildHints(targets) {
+        this.clearBuildHints();
+        const g = this.createGroup({ id: 'build-hints-layer', 'pointer-events': 'none' });
+        const ABBR = { coalMine: '煤', ironWorks: '鐵', brewery: '啤', cottonMill: '棉', manufacturer: '製', pottery: '陶' };
+        const bySlot = new Map();
+        for (const t of targets) {
+            const k = `${t.cityId}|${t.slotIndex}`;
+            if (!bySlot.has(k)) bySlot.set(k, { t, types: new Set() });
+            bySlot.get(k).types.add(t.industryType);
+        }
+        for (const { t, types } of bySlot.values()) {
+            let x, y, w, h;
+            const farm = this.svg.querySelector(`.brewery-farm[data-farm="${t.cityId}"]`);
+            if (farm) { const p = this.pos(t.cityId); w = h = 26; x = p.x - 13; y = p.y - 13; }
+            else {
+                const el = this.svg.querySelector(`.industry-slot[data-city="${t.cityId}"][data-slot="${t.slotIndex}"]`);
+                const r = el && el.querySelector('rect');
+                if (!r) continue;
+                const c = this.pos(t.cityId);
+                x = c.x + +r.getAttribute('x'); y = c.y + +r.getAttribute('y');
+                w = +r.getAttribute('width'); h = +r.getAttribute('height');
+            }
+            g.appendChild(this.createElement('rect', { x: x - 2, y: y - 2, width: w + 4, height: h + 4, rx: 4, ry: 4,
+                fill: 'rgba(120,255,170,0.10)', stroke: '#7dffb0', 'stroke-width': 2.5, class: 'build-hint' }));
+            const label = [...types].map(k => ABBR[k] || '?').join('');
+            const bw = label.length * 9 + 5;
+            g.appendChild(this.createElement('rect', { x: x + w - bw + 3, y: y + h - 8, width: bw, height: 12, rx: 3, ry: 3,
+                fill: 'rgba(8,40,22,0.9)', stroke: '#7dffb0', 'stroke-width': 0.8 }));
+            g.appendChild(this.text(label, { x: x + w - bw / 2 + 3, y: y + h - 2, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                'font-size': '9', 'font-weight': '700', fill: '#c9ffe0', class: 'build-hint-badge' }));
+        }
+        const labels = this.svg.querySelector('#town-labels-layer');
+        this.svg.insertBefore(g, labels || null);
+    }
+
+    clearBuildHints() { this.svg.querySelector('#build-hints-layer')?.remove(); }
+
+    setTownLabelsVisible(on) {
+        this.labelsHidden = !on;
+        const g = this.svg.querySelector('#town-labels-layer');
+        if (g) { if (on) g.removeAttribute('display'); else g.setAttribute('display', 'none'); }
     }
 
     // ========================================================================
@@ -1676,6 +1663,7 @@ class BoardRenderer {
         const oldLinks = this.svg.querySelector('#built-links-layer');
         if (oldLinks) oldLinks.remove();
         this.drawBuiltLinks();
+        this.drawTownLabels();
     }
 
     updateMerchantBeer() {
@@ -1705,5 +1693,6 @@ class BoardRenderer {
         this.drawMerchants();
         this.drawCities();
         this.drawBuiltLinks();
+        this.drawTownLabels();
     }
 }

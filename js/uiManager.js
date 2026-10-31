@@ -175,6 +175,18 @@ class UIManager {
         this.updateMarkets();
         this.updatePhaseBar();
         this.renderer.fullUpdate(this.state);
+        this.updateBuildHints();
+    }
+
+    // Lights every currently legal build slot while it's my turn and no action
+    // is chosen yet (same legality check as the build flow).
+    updateBuildHints() {
+        if (!this.renderer) return;
+        const on = this.buildHintsOn !== false;
+        if (!on || !this.isMyTurn() || this.selectedAction) { this.renderer.clearBuildHints(); return; }
+        let targets = [];
+        try { targets = this.logic.getValidBuildTargets(this.myId); } catch (e) { targets = []; }
+        this.renderer.showBuildHints(targets);
     }
 
     updateTopBar() {
@@ -369,6 +381,7 @@ class UIManager {
     }
 
     updateActionButtons() {
+        this.updateBuildHints();
         const playerId = this.state.currentPlayerId;
         if (!this.isMyTurn()) {
             document.querySelectorAll('.action-btn').forEach(btn => {
@@ -727,6 +740,7 @@ class UIManager {
         this.pendingData = {};
         this.selectedCard = null;
         this.renderer.clearHighlights();
+        this.hideLinkPicker();
         this.hideBuildPanel();
         this.updateActionButtons();
         this.updateHand();
@@ -953,31 +967,62 @@ class UIManager {
         }
 
         this.renderer.highlightConnections(targets.map(t => t.connectionId));
+        this.networkTargets = targets;
+        this.showLinkPicker(targets);
+    }
 
-        let html = '<div class="choice-list">';
-        for (const target of targets) {
-            const city1 = CITIES[target.cities[0]]?.name || MERCHANTS[target.cities[0]]?.name || target.cities[0];
-            const city2 = CITIES[target.cities[1]]?.name || MERCHANTS[target.cities[1]]?.name || target.cities[1];
-            html += `
-                <div class="choice-item" data-conn="${target.connectionId}">
-                    <div class="choice-item-icon">${target.type === 'canal' ? '~' : '#'}</div>
-                    <div class="choice-item-text">
-                        <div class="choice-item-name">${city1} — ${city2}</div>
-                        <div class="choice-item-detail">${target.type}</div>
-                    </div>
-                    <div class="choice-item-cost">£${target.cost}</div>
-                </div>
-            `;
+    // Non-modal picker: the map stays tappable (pulsing legal links); a tap
+    // shows a confirmation line with both town names and the cost.
+    linkTownName(id) {
+        const en = CITIES[id]?.name || MERCHANTS[id]?.name || id;
+        const zh = (typeof I18N !== 'undefined' && I18N.zhName) ? I18N.zhName(en) : en;
+        return zh === en ? en : `${zh} ${en}`;
+    }
+
+    showLinkPicker(targets) {
+        this.hideLinkPicker();
+        const box = document.createElement('div');
+        box.id = 'link-picker';
+        const typeZh = t => t === 'canal' ? '運河' : '鐵路';
+        let list = '';
+        for (const t of targets) {
+            list += `<button class="link-pick-item" data-conn="${t.connectionId}">${this.linkTownName(t.cities[0])} — ${this.linkTownName(t.cities[1])} <span>${typeZh(t.type)} £${t.cost}</span></button>`;
         }
-        html += '</div>';
-
-        this.showModal('Build Link', html, () => {});
-
-        document.querySelectorAll('#modal-body .choice-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.afterNetworkFirstSelection(item.dataset.conn);
-            });
+        box.innerHTML = `<div class="link-pick-hint">點選地圖上<b>閃爍的金色連線</b>來建造（共 ${targets.length} 條可選）</div>
+            <div class="link-pick-confirm hidden"><div class="link-pick-text"></div>
+              <button class="link-pick-ok">確認建造</button><button class="link-pick-no">重選</button></div>
+            <details class="link-pick-list"><summary>或從清單選擇</summary>${list}</details>`;
+        const host = document.getElementById('board-container');
+        // On phones the picker sits under the board so it never hides the links.
+        if (host && (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760) { box.classList.add('below-board'); host.after(box); }
+        else (host || document.body).appendChild(box);
+        box.querySelectorAll('.link-pick-item').forEach(b => b.addEventListener('click', () => this.previewLink(b.dataset.conn)));
+        box.querySelector('.link-pick-no').addEventListener('click', () => {
+            box.querySelector('.link-pick-confirm').classList.add('hidden');
+            this.renderer.highlightConnections(targets.map(t => t.connectionId));
         });
+        box.querySelector('.link-pick-ok').addEventListener('click', () => {
+            const id = box.dataset.selected;
+            if (id) { this.hideLinkPicker(); this.afterNetworkFirstSelection(id); }
+        });
+    }
+
+    previewLink(connId) {
+        const box = document.getElementById('link-picker');
+        const t = (this.networkTargets || []).find(x => x.connectionId === connId);
+        if (!box || !t) return;
+        box.dataset.selected = connId;
+        const typeZh = t.type === 'canal' ? '運河' : '鐵路';
+        box.querySelector('.link-pick-text').textContent =
+            `${this.linkTownName(t.cities[0])} ⇄ ${this.linkTownName(t.cities[1])}｜${typeZh}｜費用 £${t.cost}`;
+        box.querySelector('.link-pick-confirm').classList.remove('hidden');
+        this.renderer.svg.querySelectorAll('.connection-line.chosen-link').forEach(e => e.classList.remove('chosen-link'));
+        this.renderer.svg.querySelectorAll(`[data-connection="${connId}"]`).forEach(e => e.classList.add('chosen-link'));
+    }
+
+    hideLinkPicker() {
+        document.getElementById('link-picker')?.remove();
+        this.renderer?.svg?.querySelectorAll('.chosen-link').forEach(e => e.classList.remove('chosen-link'));
     }
 
     // In the Rail Era a second link may be added (£15 total, +1 coal, +1 beer
@@ -1332,7 +1377,7 @@ class UIManager {
         if (this.selectedAction === ACTIONS.NETWORK) {
             const line = target.closest('.connection-line');
             if (line && line.classList.contains('highlight')) {
-                this.afterNetworkFirstSelection(line.dataset.connection);
+                this.previewLink(line.dataset.connection);
             }
         }
     }

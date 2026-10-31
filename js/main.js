@@ -241,6 +241,7 @@ function startOnline(roomId, token) {
                     const svg = document.getElementById('game-board');
                     boardRenderer = new BoardRenderer(svg);
                     boardRenderer.render(st);
+                    setupBoardTools(boardRenderer, st);
                     uiManager = new UIManager();
                     uiManager.init(st, new GameLogic(st), boardRenderer, { net: netClient, myId: msg.you });
                     window.uiManager = uiManager;
@@ -274,3 +275,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (room && token) startOnline(room, token);
     else initSetup();
 });
+
+
+// Name-label toggle + collapsible link legend overlaid on the board.
+function setupBoardTools(renderer, st) {
+    const host = document.getElementById('board-container');
+    if (!host || document.getElementById('board-tools')) return;
+    const box = document.createElement('div');
+    box.id = 'board-tools';
+    let on = true;
+    try { on = localStorage.getItem('brass-labels') !== 'off'; } catch (e) {}
+    const players = (st.players || []).map(p =>
+        `<span class="lg-player"><i style="background:${p.color}"></i>${String(p.name || '').replace(/[<>&"]/g, '')}</span>`).join('');
+    box.innerHTML = `<div class="bt-row"><button id="toggle-labels-btn" type="button"></button><button id="toggle-hints-btn" type="button">顯示可蓋位置</button></div>
+        <details id="link-legend"><summary>圖例</summary>
+          <div class="lg-row"><svg width="40" height="12"><line x1="4" y1="6" x2="36" y2="6" stroke="#888" stroke-width="10" stroke-linecap="round"/><line x1="4" y1="6" x2="36" y2="6" stroke="#1f7fd6" stroke-width="6" stroke-linecap="round"/></svg>運河（藍線）</div>
+          <div class="lg-row"><svg width="40" height="12"><line x1="4" y1="6" x2="36" y2="6" stroke="#888" stroke-width="10" stroke-linecap="round"/><line x1="4" y1="6" x2="36" y2="6" stroke="#151515" stroke-width="6"/><line x1="4" y1="6" x2="36" y2="6" stroke="#e8e0cc" stroke-width="6" stroke-dasharray="2 5"/></svg>鐵路（黑底枕木）</div>
+          <div class="lg-row lg-note">外框顏色 = 擁有者</div>
+          <div class="lg-players">${players}</div>
+        </details>`;
+    host.appendChild(box);
+    window.addEventListener('boardassets:ready', () => setTimeout(() => window.uiManager && window.uiManager.updateBuildHints(), 0));
+    const btn = box.querySelector('#toggle-labels-btn');
+    const apply = () => { btn.textContent = on ? '隱藏地名' : '顯示地名'; btn.setAttribute('aria-pressed', String(on)); renderer.setTownLabelsVisible(on); };
+    btn.addEventListener('click', () => { on = !on; try { localStorage.setItem('brass-labels', on ? 'on' : 'off'); } catch (e) {} apply(); });
+    apply();
+    const hb = box.querySelector('#toggle-hints-btn');
+    const applyH = () => { const v = window.uiManager ? window.uiManager.buildHintsOn !== false : true;
+        hb.setAttribute('aria-pressed', String(v)); hb.classList.toggle('on', v); };
+    hb.addEventListener('click', () => { const um = window.uiManager; if (!um) return;
+        um.buildHintsOn = um.buildHintsOn === false; um.updateBuildHints(); applyH(); });
+    applyH();
+}

@@ -91,6 +91,66 @@ async function load(url, errors, lang) {
         check('lang toggle lives in the top bar (no overlap with log)', !!gd.querySelector('#top-bar .lang-toggle'));
         check('player panels show 行動中 / 等待中 labels', gd.getElementById('player-panels').textContent.includes('等待中') && gd.getElementById('player-panels').textContent.includes('行動中'));
         check('board zoom buttons present', gd.querySelectorAll('.board-zoom button').length === 3);
+        {
+            const W = g.window;
+            const labels = [...gd.querySelectorAll('#town-labels-layer .town-label')];
+            const cityIds = Object.keys(W.eval('CITIES'));
+            const ids = new Set(labels.map(l => l.dataset.label));
+            check('town labels: one per town', cityIds.every(id => ids.has(id)), cityIds.filter(id => !ids.has(id)).join(','));
+            check('town labels: active merchants labelled 商人', ['shrewsbury', 'gloucester', 'oxford'].every(id => ids.has(id))
+                && gd.querySelector('[data-label="oxford"] .town-label-zh').textContent === '牛津商人');
+            check('town label zh+en (伯明罕 / Birmingham)', gd.querySelector('[data-label="birmingham"] .town-label-zh').textContent === '伯明罕'
+                && gd.querySelector('[data-label="birmingham"] .town-label-en').textContent === 'Birmingham');
+            check('town labels pointer-events none', gd.getElementById('town-labels-layer').getAttribute('pointer-events') === 'none');
+            const tb = gd.getElementById('toggle-labels-btn');
+            check('toggle default ON (隱藏地名)', tb && tb.textContent === '隱藏地名' && !gd.getElementById('town-labels-layer').hasAttribute('display'));
+            tb.click();
+            check('toggle hides labels (顯示地名)', tb.textContent === '顯示地名' && gd.getElementById('town-labels-layer').getAttribute('display') === 'none');
+            tb.click();
+            check('link legend present (運河/鐵路)', /運河/.test(gd.getElementById('link-legend').textContent) && /鐵路/.test(gd.getElementById('link-legend').textContent));
+            // Built link overlay
+            const st = um.state; const conn = W.eval('CONNECTIONS').find(c => c.canal);
+            st.boardLinks[conn.id] = { playerId: 0, type: 'canal' };
+            um.renderer.updateLinks();
+            const lines = gd.querySelectorAll('#built-links-layer line');
+            check('built canal link drawn bold blue with owner colour', [...lines].some(l => l.getAttribute('stroke') === '#1f7fd6')
+                && [...lines].some(l => l.getAttribute('stroke') === st.players[0].color && +l.getAttribute('stroke-width') >= 14));
+            check('town labels still on top after link redraw', gd.getElementById('game-board').lastElementChild.id === 'town-labels-layer');
+            delete st.boardLinks[conn.id]; um.renderer.updateLinks();
+            // Build hints on my idle turn
+            {
+                const realTurn = um.isMyTurn; um.isMyTurn = () => true; um.selectedAction = null;
+                um.updateBuildHints();
+                const n = new Set(um.logic.getValidBuildTargets(um.myId).map(t => t.cityId + '|' + t.slotIndex)).size;
+                const hints = gd.querySelectorAll('#build-hints-layer .build-hint').length;
+                check('build hints: one glow per legal slot', n > 0 && hints === n, hints + ' vs ' + n);
+                check('build hints badges use 煤/鐵/啤/棉/製/陶', [...gd.querySelectorAll('.build-hint-badge')].every(b => /^[煤鐵啤棉製陶]+$/.test(b.textContent)));
+                check('build hints pointer-events none', gd.getElementById('build-hints-layer').getAttribute('pointer-events') === 'none');
+                const hb = gd.getElementById('toggle-hints-btn');
+                check('顯示可蓋位置 toggle default ON', hb && hb.textContent === '顯示可蓋位置' && hb.getAttribute('aria-pressed') === 'true');
+                hb.click();
+                check('toggle OFF clears hints', !gd.getElementById('build-hints-layer') && hb.getAttribute('aria-pressed') === 'false');
+                hb.click();
+                um.selectedAction = 'network'; um.updateBuildHints();
+                check('hints hidden once an action is chosen', !gd.getElementById('build-hints-layer'));
+                um.selectedAction = null; um.isMyTurn = realTurn; um.updateBuildHints();
+            }
+            // Link picker: tap map -> confirmation with zh+en names and cost
+            const targets = um.logic.getValidNetworkTargets(0);
+            if (targets.length) {
+                um.selectedAction = 'network';
+                um.startNetwork(0);
+                const t0 = targets[0];
+                const hl = gd.querySelector(`.connection-line.highlight[data-connection="${t0.connectionId}"]`);
+                check('legal links highlighted on map', !!hl && gd.querySelectorAll('.connection-line.highlight').length >= targets.length);
+                um.previewLink(t0.connectionId);
+                const txt = gd.querySelector('#link-picker .link-pick-text').textContent;
+                const en1 = W.eval('CITIES')[t0.cities[0]]?.name || W.eval('MERCHANTS')[t0.cities[0]].name;
+                check('confirmation shows town names (zh+en) and cost', txt.includes(en1) && txt.includes(W.I18N.zhName(en1)) && txt.includes('£' + t0.cost), txt);
+                um.cancelAction();
+                check('cancel removes link picker', !gd.getElementById('link-picker'));
+            } else console.log('SKIP  link picker (no network targets)');
+        }
         um.selectedAction = 'build'; um.actionStep = 0; um.updatePhaseBar(); await sleep(50);
         const lbls = () => [...gd.querySelectorAll('.phase-step')].filter(x => !x.classList.contains('hidden')).map(x => x.querySelector('.phase-step-label').textContent).join('>');
         check('build step bar: 選擇行動>選擇工業與地點>棄一張牌', lbls() === '選擇行動>選擇工業與地點>棄一張牌', lbls());
