@@ -22,6 +22,6 @@ function __restoreState(s) {
 `, ctx, { filename: 'engine-helpers.js' });
 
 module.exports = vm.runInContext(`({
-    GameState, GameLogic, AIPlayer, ACTIONS, CARD_TYPES, ERA, INDUSTRY_DISPLAY,
+    GameState, GameLogic, linkScoreBreakdown, AIPlayer, ACTIONS, CARD_TYPES, ERA, INDUSTRY_DISPLAY,
     dumpState: __dumpState, restoreState: __restoreState
 })`, ctx);

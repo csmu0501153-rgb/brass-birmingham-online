@@ -2,6 +2,34 @@
 // Brass: Birmingham - Game State Management
 // ============================================================================
 
+// Shared by era scoring (calculateEraScore) and the on-board link VP badges.
+// A link scores 1 VP per link icon on the FLIPPED tiles in the locations at
+// both ends (unflipped tiles give nothing); each merchant location end counts
+// 2; a brewery farm the link passes through (viaBrewery) counts too.
+function linkScoreBreakdown(state, connId) {
+    const conn = CONNECTIONS.find(c => c.id === connId);
+    const parts = [];
+    if (!conn) return { total: 0, parts };
+    const inds = state.boardIndustries || {}, farms = state.breweryFarmTiles || {};
+    const farmVP = id => { const t = farms[id]; return (t && t.flipped) ? t.tileData.linkVP : 0; };
+    const locs = conn.cities.slice();
+    if (conn.viaBrewery) locs.push(conn.viaBrewery);
+    for (const cityId of locs) {
+        let vp = 0;
+        if (isCity(cityId)) {
+            const city = CITIES[cityId];
+            for (let i = 0; i < city.slots.length; i++) {
+                const tile = inds[`${cityId}_${i}`];
+                if (tile && tile.flipped) vp += tile.tileData.linkVP;
+            }
+        }
+        if (isMerchantLocation(cityId)) vp += 2;
+        if (isBreweryFarm(cityId)) vp += farmVP(cityId);
+        parts.push({ location: cityId, vp });
+    }
+    return { total: parts.reduce((a, p) => a + p.vp, 0), parts };
+}
+
 class GameState {
     constructor(numPlayers, playerNames, playerIsAI = []) {
         this.numPlayers = numPlayers;
@@ -817,39 +845,7 @@ class GameState {
             const conn = CONNECTIONS.find(c => c.id === connId);
             if (!conn) continue;
 
-            // Each link scores 1 VP per link icon in adjacent locations.
-            // Link icons are printed only on the FLIPPED face of industry tiles;
-            // unflipped tiles contribute nothing. Merchant locations count
-            // 2 each regardless of tile state.
-            let linkValue = 0;
-            for (const cityId of conn.cities) {
-                if (isCity(cityId)) {
-                    const city = CITIES[cityId];
-                    for (let i = 0; i < city.slots.length; i++) {
-                        const key = `${cityId}_${i}`;
-                        const tile = this.boardIndustries[key];
-                        if (tile && tile.flipped) {
-                            linkValue += tile.tileData.linkVP;
-                        }
-                    }
-                }
-                if (isMerchantLocation(cityId)) {
-                    linkValue += 2;
-                }
-                if (isBreweryFarm(cityId)) {
-                    const tile = this.breweryFarmTiles[cityId];
-                    if (tile && tile.flipped) {
-                        linkValue += tile.tileData.linkVP;
-                    }
-                }
-            }
-            // Also score brewery farms that this link passes through (e.g. kidderminster-worcester via southern)
-            if (conn.viaBrewery) {
-                const tile = this.breweryFarmTiles[conn.viaBrewery];
-                if (tile && tile.flipped) {
-                    linkValue += tile.tileData.linkVP;
-                }
-            }
+            const linkValue = linkScoreBreakdown(this, connId).total;
 
             const playerScore = scores.find(s => s.playerId === link.playerId);
             if (playerScore) {

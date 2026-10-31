@@ -986,7 +986,20 @@ class BoardRenderer {
             g.appendChild(this.createElement('rect', {
                 x: x + 0.6, y: y + 0.6, width: s - 1.2, height: sh - 1.2,
                 rx: 2.5, ry: 2.5, fill: 'none',
-                stroke: playerColor, 'stroke-width': 2.2, 'stroke-opacity': 0.95,
+                stroke: '#0b0d12', 'stroke-width': 4.6, 'stroke-opacity': 0.8,
+            }));
+            // Thick owner ring (matches the player panel colour) — visible on
+            // both faces, so a flipped tile still reads as its owner's.
+            g.appendChild(this.createElement('rect', {
+                x: x + 1.2, y: y + 1.2, width: s - 2.4, height: sh - 2.4,
+                rx: 2.5, ry: 2.5, fill: 'none', class: 'tile-owner-ring', 'data-owner': String(tile.playerId),
+                stroke: playerColor, 'stroke-width': 3.2, 'stroke-opacity': 1,
+            }));
+            // Owner corner flag (bottom-right) for an at-a-glance colour patch.
+            const f = Math.round(s * 0.36);
+            g.appendChild(this.createElement('path', {
+                d: `M${x + s},${y + sh - f} L${x + s},${y + sh} L${x + s - f},${y + sh} Z`,
+                fill: playerColor, stroke: '#0b0d12', 'stroke-width': 0.8, class: 'tile-owner-flag',
             }));
             // Lit top-left edge gives the chip its thickness.
             g.appendChild(this.createElement('path', {
@@ -1382,29 +1395,62 @@ class BoardRenderer {
             if (bp) { segs.push({ x1: pos1.x, y1: pos1.y, x2: bp.x, y2: bp.y }); segs.push({ x1: bp.x, y1: bp.y, x2: pos2.x, y2: pos2.y }); }
             else segs.push({ x1: pos1.x, y1: pos1.y, x2: pos2.x, y2: pos2.y });
 
+            // Line body in the owner's colour (same as the player panel), slimmer
+            // and slightly see-through so tiles underneath stay readable. A dark
+            // casing keeps the light (white) player visible on the dark map.
             for (const seg of segs) {
-                // Soft glow in the owner's colour, then owner outline, then the link body.
-                L(seg, { stroke: playerColor, 'stroke-width': 22, 'stroke-opacity': '0.35', class: 'connection-line built link-glow' });
-                L(seg, { stroke: '#0b0d12', 'stroke-width': 17, 'stroke-opacity': '0.9' });
-                L(seg, { stroke: playerColor, 'stroke-width': 14 });
+                L(seg, { stroke: '#0b0d12', 'stroke-width': 11, 'stroke-opacity': '0.75' });
+                L(seg, { stroke: playerColor, 'stroke-width': 8, 'stroke-opacity': '0.85', class: 'connection-line built link-body' });
                 if (link.type === 'canal') {
-                    L(seg, { stroke: '#1f7fd6', 'stroke-width': 8 });
-                    L(seg, { stroke: '#9fd4ff', 'stroke-width': 2, 'stroke-opacity': '0.8' });
+                    // Canal: thin water stripe down the middle.
+                    L(seg, { stroke: '#1f7fd6', 'stroke-width': 2.5, 'stroke-opacity': '0.9' });
                 } else {
-                    L(seg, { stroke: '#151515', 'stroke-width': 8 });
-                    L(seg, { stroke: '#e8e0cc', 'stroke-width': 8, 'stroke-linecap': 'butt', 'stroke-dasharray': '2 6' });
+                    // Rail: dark sleepers across the owner colour.
+                    L(seg, { stroke: '#151515', 'stroke-width': 8, 'stroke-linecap': 'butt', 'stroke-dasharray': '2 5', 'stroke-opacity': '0.8' });
                 }
             }
             const mx = (pos1.x + pos2.x) / 2, my = (pos1.y + pos2.y) / 2;
             const at = bp ? bp : { x: mx, y: my };
-            linkGroup.appendChild(this.createElement('circle', { cx: at.x, cy: at.y, r: 8, fill: playerColor, stroke: '#0b0d12', 'stroke-width': 2 }));
-            linkGroup.appendChild(this.text(link.type === 'canal' ? '≈' : '≡', {
+            const badge = this.createGroup({ class: 'link-badge', 'pointer-events': 'auto', 'data-link': connId });
+            badge.style.cursor = 'pointer';
+            badge.appendChild(this.createElement('circle', { cx: at.x, cy: at.y, r: 8, fill: playerColor, stroke: '#0b0d12', 'stroke-width': 2 }));
+            badge.appendChild(this.text(link.type === 'canal' ? '≈' : '≡', {
                 x: at.x, y: at.y + 0.5, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-                'font-size': '10', 'font-weight': '700', fill: '#fff', 'pointer-events': 'none',
+                'font-size': '10', 'font-weight': '700', fill: (playerColor === '#d9d0c2' || playerColor === '#f39c12') ? '#111' : '#fff', 'pointer-events': 'none',
             }));
-            linkGroup.lastChild.setAttribute('data-link', connId);
+            // Current VP this link would score at era end (same function as scoring).
+            const lvp = (typeof linkScoreBreakdown === 'function') ? linkScoreBreakdown(this.state, connId) : null;
+            if (lvp) {
+                badge.appendChild(this.createElement('rect', { x: at.x + 7, y: at.y - 6.5, width: lvp.total >= 10 ? 19 : 14, height: 13, rx: 3, ry: 3,
+                    fill: '#0b0d12', 'fill-opacity': '0.85', stroke: playerColor, 'stroke-width': 1 }));
+                badge.appendChild(this.text('+' + lvp.total, { x: at.x + 9, y: at.y + 0.5, 'dominant-baseline': 'central',
+                    'font-size': '9', 'font-weight': '700', fill: '#ffe08a', class: 'link-vp', 'data-vp': String(lvp.total), 'pointer-events': 'none' }));
+                // Generous invisible hit target for fingers.
+                badge.appendChild(this.createElement('circle', { cx: at.x + 4, cy: at.y, r: 14, fill: 'transparent' }));
+                badge.addEventListener('click', (e) => { e.stopPropagation(); this.showLinkScoreInfo(connId, link, lvp); });
+            }
+            linkGroup.appendChild(badge);
         }
         this.svg.appendChild(linkGroup);
+    }
+
+    showLinkScoreInfo(connId, link, lvp) {
+        const zh = (() => { try { return (localStorage.getItem('brass-lang') || 'zh') === 'zh'; } catch (_) { return true; } })();
+        const nm = id => {
+            const en = (CITIES[id] || MERCHANTS[id] || (typeof BREWERY_FARMS !== 'undefined' && BREWERY_FARMS[id]) || {}).name || id;
+            if (!zh) return en;
+            if (MERCHANTS[id] && typeof merchantNameZh === 'function') return merchantNameZh(id);
+            if (isBreweryFarm(id)) return id === 'northern' ? '北方啤酒農場' : '南方啤酒農場';
+            const z = (typeof I18N !== 'undefined' && I18N.zhName) ? I18N.zhName(en) : null;
+            return z || en;
+        };
+        const parts = lvp.parts.map(p => `${nm(p.location)} +${p.vp}`).join(zh ? '、' : ', ');
+        const kind = zh ? (link.type === 'canal' ? '運河' : '鐵路') : (link.type === 'canal' ? 'Canal' : 'Rail');
+        const msg = zh
+            ? `${kind}目前值 +${lvp.total} 分（${parts}；只計已翻面板塊的連線圖示，商人格 +2）`
+            : `${kind} link worth +${lvp.total} VP now (${parts}; flipped tiles' link icons only, merchant +2)`;
+        this.lastLinkInfo = msg;
+        if (typeof window !== 'undefined' && window.uiManager && window.uiManager.showToast) window.uiManager.showToast(msg, 'info');
     }
 
     // Chinese/English name pills over every town and merchant. Purely visual:

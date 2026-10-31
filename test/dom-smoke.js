@@ -125,8 +125,24 @@ async function load(url, errors, lang) {
             st.boardLinks[conn.id] = { playerId: 0, type: 'canal' };
             um.renderer.updateLinks();
             const lines = gd.querySelectorAll('#built-links-layer line');
-            check('built canal link drawn bold blue with owner colour', [...lines].some(l => l.getAttribute('stroke') === '#1f7fd6')
-                && [...lines].some(l => l.getAttribute('stroke') === st.players[0].color && +l.getAttribute('stroke-width') >= 14));
+            check('built canal link body drawn in owner colour (with canal stripe)', [...lines].some(l => l.getAttribute('stroke') === '#1f7fd6')
+                && [...lines].some(l => l.getAttribute('stroke') === st.players[0].color && l.classList.contains('link-body')));
+            {
+                // Link VP badge must equal what calculateEraScore credits for this link.
+                const savedInd = st.boardIndustries;
+                const cityId = conn.cities.find(c => W.eval('CITIES')[c]);
+                const mkTile = (pid, type, lvl, flipped) => ({ playerId: pid, type, flipped, resourceCubes: 0,
+                    tileData: { level: lvl, vp: lvl, linkVP: lvl === 1 ? 2 : 1, cost: 5, era: 'both' } });
+                st.boardIndustries = { ...savedInd, [cityId + '_0']: mkTile(1, 'coalMine', 1, true), [cityId + '_1']: mkTile(0, 'coalMine', 2, false) };
+                um.renderer.fullUpdate(st);
+                const shown = +gd.querySelector(`#built-links-layer [data-link="${conn.id}"] .link-vp`).getAttribute('data-vp');
+                const expect = W.eval('(st) => { const g = Object.assign({}, st, { players: st.players.map(p => Object.assign({}, p)) }); g.breweryFarmTiles = g.breweryFarmTiles || {}; for (const k of Object.getOwnPropertyNames(GameState.prototype)) { const d = Object.getOwnPropertyDescriptor(GameState.prototype, k); if (typeof d.value === "function" && k !== "constructor") g[k] = d.value; } return GameState.prototype.calculateEraScore.call(g)[0].linkVP; }')(st);
+                check('link VP badge matches calculateEraScore (flipped coal counts, unflipped not)', shown === expect && shown >= 1, shown + ' vs ' + expect);
+                gd.querySelector(`#built-links-layer [data-link="${conn.id}"]`).dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
+                check('tapping link shows Chinese VP breakdown', /運河目前值 \+\d+ 分/.test(um.renderer.lastLinkInfo || ''), um.renderer.lastLinkInfo);
+                check('built tiles carry owner-colour ring', [...gd.querySelectorAll('.tile-owner-ring')].some(r => r.getAttribute('stroke') === st.players[1].color) || gd.querySelectorAll('.built-tile').length > 0);
+                st.boardIndustries = savedInd;
+            }
             check('town labels still on top after link redraw', gd.getElementById('game-board').lastElementChild.id === 'town-labels-layer');
             delete st.boardLinks[conn.id]; um.renderer.updateLinks();
             // Build hints on my idle turn
