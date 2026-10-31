@@ -130,7 +130,7 @@ const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(St
         }
         // ---- Card preview on mobile: tap a hand card -> its legal spots glow
         {
-            const CS = process.env.CARD_SHOTS || '/workspace/card-shots';
+            const CS = process.env.CARD_SHOTS || '/workspace/fix-shots';
             fs.mkdirSync(CS, { recursive: true });
             await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
             await page.goto(cardUrl); await waitUi(); await sleep(800);
@@ -147,9 +147,40 @@ const ready = new Promise(res => srv.stdout.on('data', d => { if (/on :/.test(St
                 check(`mobile card ${i}: glowing slots == rules legal set`, JSON.stringify(r.want) === JSON.stringify(r.got), r.want + ' vs ' + r.got);
                 check(`mobile card ${i}: hint text`, r.want.length ? /這張牌可以蓋在亮起來的地方/.test(r.hint) : /這張牌目前沒有可蓋的位置（.+）/.test(r.hint), r.hint);
                 await page.screenshot({ path: path.join(CS, `card-${i}-${r.type}.png`) });
+                const cov = await page.evaluate(i => {
+                    const um = window.uiManager; const bad = [];
+                    const labels = [...document.querySelectorAll('#town-labels-layer .town-label')].filter(l => getComputedStyle(l).display !== 'none').map(l => l.getBoundingClientRect());
+                    document.querySelectorAll('#game-board .highlight-slot').forEach(el => {
+                        const r = el.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+                        if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return;
+                        const hit = document.elementFromPoint(cx, cy);
+                        const k = el.dataset.farm || (el.dataset.city + ':' + el.dataset.slot);
+                        if (!hit || !el.contains(hit)) bad.push(k + ' hit=' + (hit && (hit.id || hit.className.baseVal || hit.className)));
+                        if (labels.some(b => b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top)) bad.push(k + ' under label');
+                    });
+                    return bad;
+                }, i);
+                check(`mobile card ${i}: every lit slot is topmost and not under a label`, cov.length === 0, cov.join('; '));
+                if (r.want.length) { await sleep(2300); check(`mobile card ${i}: hint toast auto-hides`, await page.evaluate(() => document.getElementById('card-preview-hint').classList.contains('hidden'))); }
                 await page.tap(`#player-hand .card:nth-child(${i + 1})`); await sleep(200);
                 check(`mobile card ${i}: tap again deselects`, await page.evaluate(() => window.uiManager.previewCard == null && !document.querySelector('#game-board .highlight-slot')));
             }
+            const handTxt = await page.$$eval('#player-hand .card', es => es.map(e => e.textContent.trim().replace(/\s+/g, ' ')));
+            console.log('HAND', handTxt.join(' | '));
+            check('mobile hand cards are Chinese', handTxt.every(t => /[\u4e00-\u9fff]/.test(t) && !/Location|Industry|Wild\b|Cotton|Coal Mine|Iron Works|Pottery|Brewery|Manufacturer/.test(t.replace(/[A-Z][a-z-]+(?:-on-[A-Z][a-z]+)?$/, ''))), handTxt.join('|'));
+            await page.screenshot({ path: path.join(CS, 'mobile-hand-zh.png') });
+            // Desktop shots of the lit spots per card
+            await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+            await page.goto(cardUrl); await waitUi(); await sleep(800);
+            for (let i = 0; i < n; i++) {
+                await page.click(`#player-hand .card:nth-child(${i + 1})`); await sleep(300);
+                const bad = await page.evaluate(() => [...document.querySelectorAll('#game-board .highlight-slot')].filter(el => { const r = el.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2; if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return false; const h = document.elementFromPoint(cx, cy); return !h || !el.contains(h); }).map(e => e.dataset.city + ':' + e.dataset.slot));
+                check(`desktop card ${i}: lit slots topmost`, bad.length === 0, bad.join(','));
+                await page.screenshot({ path: path.join(CS, `desktop-card-${i}.png`) });
+                await page.click(`#player-hand .card:nth-child(${i + 1})`); await sleep(200);
+            }
+            await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+            await page.goto(cardUrl); await waitUi(); await sleep(800);
             // Location card (Coventry) -> tap glowing slot -> confirm -> server builds
             await page.tap('#player-hand .card:nth-child(1)'); await sleep(300);
             const slotKey = await page.evaluate(() => { const um = window.uiManager; const t = um.logic.getBuildTargetsForCard(um.myId, 0)[0]; return t && { c: t.cityId, s: t.slotIndex, ty: t.industryType }; });

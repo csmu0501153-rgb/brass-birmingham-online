@@ -2419,3 +2419,15 @@ body.fatal-only #game-screen { display: none !important; }
 @keyframes cp-glow { from { filter: drop-shadow(0 0 2px #ffd36e); } to { filter: drop-shadow(0 0 9px #ffd36e); } }
 .card.previewing { outline: 3px solid #7dffb0; outline-offset: 2px; transform: translateY(-8px); }
 @media (max-width: 760px) { #card-preview-hint { top: 6px; font-size: 13px; padding: 6px 8px; } }
+/* v8: labels never cover lit slots; preview hint is a small bottom toast */
+#town-labels-layer .town-label.label-over-lit { display: none; }
+.build-select-mode #town-labels-layer { opacity: .55; }
+#card-preview-hint.cp-toast { top: auto; bottom: 12px; pointer-events: none; opacity: .95; animation: cpFade 2s ease forwards; }
+#card-preview-hint.cp-toast button { display: none; }
+@keyframes cpFade { 0%,75% { opacity: .95; } 100% { opacity: 0; } }
+@media (max-width: 760px) { #card-preview-hint.cp-toast { top: auto; bottom: 8px; font-size: 12px; } #card-preview-hint.cp-none { top: auto; bottom: 8px; } }
+.card .card-name-en { font-size: 9px; opacity: .7; line-height: 1.1; }
+#board-tools { pointer-events: none; }
+#board-tools > *, #board-tools button, #board-tools summary, #board-tools details { pointer-events: auto; }
+body.card-previewing #board-tools { opacity: .25; }
+body.card-previewing #board-tools, body.card-previewing #board-tools * { pointer-events: none !important; }

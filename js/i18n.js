@@ -72,8 +72,8 @@
         'Need at least 3 cards': '至少需要 3 張手牌', 'Already have wild cards': '已持有萬用牌',
         'No wild cards available': '萬用牌已用完', 'Unknown action': '未知的行動',
         // industries
-        'Cotton Mill': '棉紡廠', 'Coal Mine': '煤礦', 'Iron Works': '鐵廠', 'Manufacturer': '製造商',
-        'Pottery': '陶器廠', 'Brewery': '啤酒廠', 'Cotton Mill / Manufacturer': '棉紡廠 / 製造商',
+        'Cotton Mill': '棉紡廠', 'Coal Mine': '煤礦', 'Iron Works': '鐵工廠', 'Manufacturer': '製造商',
+        'Pottery': '陶瓷廠', 'Brewery': '啤酒廠', 'Cotton Mill / Manufacturer': '棉紡廠 / 製造商',
         'Cotton': '棉', 'Goods': '商品', 'Beer': '啤酒', 'ANY': '任意',
         'Brewery (N)': '啤酒廠（北）', 'Brewery (S)': '啤酒廠（南）',
         // cards
@@ -131,7 +131,7 @@
 
     const IND = [
         ['Cotton Mill / Manufacturer', '棉紡廠 / 製造商'], ['Cotton Mill', '棉紡廠'], ['Coal Mine', '煤礦'],
-        ['Iron Works', '鐵廠'], ['Manufacturer', '製造商'], ['Pottery', '陶器廠'], ['Brewery', '啤酒廠'],
+        ['Iron Works', '鐵工廠'], ['Manufacturer', '製造商'], ['Pottery', '陶瓷廠'], ['Brewery', '啤酒廠'],
     ];
     const indName = s => { for (const [en, zh] of IND) s = s.split(en).join(zh); return s; };
 

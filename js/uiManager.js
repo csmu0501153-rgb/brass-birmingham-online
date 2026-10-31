@@ -281,10 +281,11 @@ class UIManager {
                 if (card.type === CARD_TYPES.LOCATION) cardEl.classList.add('location-card');
                 else if (card.type === CARD_TYPES.INDUSTRY) cardEl.classList.add('industry-card');
                 else cardEl.classList.add('wild-card');
-                const artLabel = card.type === CARD_TYPES.LOCATION
-                    ? ''
-                    : `<span class="card-art-label">${card.name || (card.type === CARD_TYPES.WILD_LOCATION ? 'Wild Location' : 'Wild Industry')}</span>`;
-                cardEl.innerHTML = `<img src="${art}" alt="${card.type === CARD_TYPES.LOCATION ? card.name || '' : ''}" draggable="false">${artLabel}`;
+                const ct = this.cardTitle(card);
+                cardEl.setAttribute('data-no-i18n', '');
+                cardEl.title = ct.zh;
+                const artLabel = `<span class="card-art-label">${this.bEsc(ct.zh)}</span>`;
+                cardEl.innerHTML = `<img src="${art}" alt="${this.bEsc(ct.zh)}" draggable="false">${artLabel}`;
                 if (this.selectedCard === idx || this.previewCard === idx) cardEl.classList.add('selected');
                 if (this.previewCard === idx) cardEl.classList.add('previewing');
                 if (this.selectedAction === ACTIONS.SCOUT &&
@@ -299,6 +300,9 @@ class UIManager {
                 return;
             }
 
+            const ct = this.cardTitle(card);
+            cardEl.setAttribute('data-no-i18n', '');
+            cardEl.title = ct.zh;
             if (card.type === CARD_TYPES.LOCATION) {
                 cardEl.classList.add('location-card');
                 const city = CITIES[card.location];
@@ -313,9 +317,9 @@ class UIManager {
                 }
 
                 cardEl.innerHTML = `
-                    <div class="card-type">Location</div>
+                    <div class="card-type">${ct.type}</div>
                     <div style="font-size:20px;margin:4px 0;">📍</div>
-                    <div class="card-name">${card.name}</div>
+                    <div class="card-name">${this.bEsc(ct.zh)}</div>${ct.en ? `<div class="card-name-en">${this.bEsc(ct.en)}</div>` : ''}
                 `;
             } else if (card.type === CARD_TYPES.INDUSTRY) {
                 cardEl.classList.add('industry-card');
@@ -334,23 +338,23 @@ class UIManager {
                     iconHtml = svgIcon || `<div class="card-icon">${display.icon}</div>`;
                 }
                 cardEl.innerHTML = `
-                    <div class="card-type">Industry</div>
+                    <div class="card-type">${ct.type}</div>
                     ${iconHtml}
-                    <div class="card-name">${card.name}</div>
+                    <div class="card-name">${this.bEsc(ct.zh)}</div>
                 `;
             } else if (card.type === CARD_TYPES.WILD_LOCATION) {
                 cardEl.classList.add('wild-card');
                 cardEl.innerHTML = `
-                    <div class="card-type">Wild</div>
+                    <div class="card-type">${ct.type}</div>
                     <div class="card-icon">&#10038;</div>
-                    <div class="card-name">Location</div>
+                    <div class="card-name">${this.bEsc(ct.zh)}</div>
                 `;
             } else if (card.type === CARD_TYPES.WILD_INDUSTRY) {
                 cardEl.classList.add('wild-card');
                 cardEl.innerHTML = `
-                    <div class="card-type">Wild</div>
+                    <div class="card-type">${ct.type}</div>
                     <div class="card-icon">&#10040;</div>
-                    <div class="card-name">Industry</div>
+                    <div class="card-name">${this.bEsc(ct.zh)}</div>
                 `;
             }
 
@@ -783,6 +787,7 @@ class UIManager {
         this.renderer.highlightSlots(targets);
         if (targets.length) this.renderer.showBuildFocus?.(targets); else this.renderer.clearBuildFocus?.();
         this.renderer.svg?.classList.add('build-select-mode', 'card-preview-mode');
+        document.body.classList.add('card-previewing');
         let el = document.getElementById('card-preview-hint');
         if (!el) {
             el = document.createElement('div');
@@ -806,12 +811,20 @@ class UIManager {
         }
         el.innerHTML = `<span class="cp-text">${this.bEsc(msg)}</span><button class="btn-small" data-cp="close">${this.bL('取消', 'Close')}</button>`;
         el.querySelector('[data-cp="close"]').addEventListener('click', () => { this.clearCardPreview(); this.updateHand(); this.updateBuildHints(); });
+        // Success hint is a brief toast; the "no spot" reason stays until deselected.
+        clearTimeout(this._cpTimer);
+        if (targets.length) {
+            el.classList.add('cp-toast');
+            this._cpTimer = setTimeout(() => { el.classList.add('hidden'); }, 2000);
+        }
     }
 
     clearCardPreview() {
         const had = this.previewCard != null;
         this.previewCard = null;
         this.previewTargets = null;
+        clearTimeout(this._cpTimer);
+        document.body.classList.remove('card-previewing');
         document.getElementById('card-preview-hint')?.classList.add('hidden');
         if (had && this.renderer) {
             this.renderer.clearHighlights();
@@ -932,6 +945,22 @@ class UIManager {
 
     // ---- helpers for the build flow (localised directly; panel is data-no-i18n)
     bzh() { return !window.I18N || window.I18N.lang() === 'zh'; }
+    // Hand-card titles in the current language (zh default; English via toggle).
+    cardTitle(card) {
+        const IZ = { cottonMill: '棉紡廠', coalMine: '煤礦', ironWorks: '鐵工廠', manufacturer: '製造商', pottery: '陶瓷廠', brewery: '啤酒廠' };
+        if (card.type === CARD_TYPES.LOCATION) {
+            const en = CITIES[card.location]?.name || card.name || '';
+            const zh = (window.I18N && window.I18N.zhName(en)) || en;
+            return { type: this.bL('地點牌', 'Location'), zh: this.bL(zh, en), en: this.bzh() && zh !== en ? en : '' };
+        }
+        if (card.type === CARD_TYPES.INDUSTRY) {
+            const types = card.industryTypes || [];
+            return { type: this.bL('工業牌', 'Industry'), zh: this.bL(types.map(t => IZ[t] || t).join(' / '), card.name || ''), en: '' };
+        }
+        if (card.type === CARD_TYPES.WILD_LOCATION) return { type: this.bL('萬用牌', 'Wild'), zh: this.bL('萬用地點牌', 'Wild Location'), en: '' };
+        return { type: this.bL('萬用牌', 'Wild'), zh: this.bL('萬用工業牌', 'Wild Industry'), en: '' };
+    }
+
     bL(zh, en) { return this.bzh() ? zh : en; }
     bTown(id) {
         const n = CITIES[id]?.name || BREWERY_FARMS[id]?.name || id;

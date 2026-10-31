@@ -193,20 +193,20 @@ async function load(url, errors, lang) {
             me.industryTiles.ironWorks.forEach(t => { t.used = false; });
             const opts = um.getDevelopSecondOptions(0, 'ironWorks');
             const iw = opts.find(o => o.type === 'ironWorks');
-            check('develop 2nd tile after 鐵廠 Lv1 offers 鐵廠 Lv2 (not Lv1)', iw && iw.level === 2, JSON.stringify(iw && iw.level));
+            check('develop 2nd tile after 鐵工廠 Lv1 offers 鐵工廠 Lv2 (not Lv1)', iw && iw.level === 2, JSON.stringify(iw && iw.level));
             const pot = me.industryTiles.pottery; const savedP = JSON.stringify(pot);
             pot.forEach(t => { t.used = t.level === 1; });
-            check('develop 2nd tile after 陶器廠 Lv2 excludes lightbulb Lv3', !um.getDevelopSecondOptions(0, 'pottery').some(o => o.type === 'pottery'));
+            check('develop 2nd tile after 陶瓷廠 Lv2 excludes lightbulb Lv3', !um.getDevelopSecondOptions(0, 'pottery').some(o => o.type === 'pottery'));
             me.industryTiles.ironWorks = JSON.parse(saved); me.industryTiles.pottery = JSON.parse(savedP);
         }
         const T = g.window.I18N.t;
         const logCases = {
             'sold Cotton Mill Lv1 [+£5 (Warrington)]': '賣出了 棉紡廠 等級1，獲得商人獎勵 +£5（沃靈頓 Warrington）',
             'sold Manufacturer Lv2 [+2 VP (Oxford)]': '賣出了 製造商 等級2，獲得商人獎勵 +2 勝利點（牛津 Oxford）',
-            'sold Pottery Lv1 [+2 income spaces (Shrewsbury)]': '賣出了 陶器廠 等級1，獲得商人獎勵 +2 收入格（什魯斯伯里 Shrewsbury）',
+            'sold Pottery Lv1 [+2 income spaces (Shrewsbury)]': '賣出了 陶瓷廠 等級1，獲得商人獎勵 +2 收入格（什魯斯伯里 Shrewsbury）',
             'sold Cotton Mill Lv1 [free develop earned (Gloucester)]': '賣出了 棉紡廠 等級1，獲得商人獎勵 獲得免費發展（格洛斯特 Gloucester）',
-            'sold Cotton Mill Lv1 [free develop: Iron Works]': '賣出了 棉紡廠 等級1，獲得商人獎勵 免費發展：鐵廠',
-            'sold Cotton Mill Lv1, sold Pottery Lv2': '賣出了 棉紡廠 等級1；賣出了 陶器廠 等級2',
+            'sold Cotton Mill Lv1 [free develop: Iron Works]': '賣出了 棉紡廠 等級1，獲得商人獎勵 免費發展：鐵工廠',
+            'sold Cotton Mill Lv1, sold Pottery Lv2': '賣出了 棉紡廠 等級1；賣出了 陶瓷廠 等級2',
             'sold Coal Mine Lv1 for £4 to cover income shortfall': '為補足收入缺口賣掉 煤礦 等級1，得 £4',
         };
         for (const [en, zh] of Object.entries(logCases)) check(`log zh: ${en}`, T(en) === zh, T(en));
@@ -284,6 +284,28 @@ async function load(url, errors, lang) {
                 check(`card preview ${i}: card marked selected`, gd.querySelectorAll('#player-hand .card')[i].classList.contains('previewing'));
             }
             check('card preview: highlighted slots == rules legal set for each card + hint', okAll, detail);
+            {
+                const txt = [...gd.querySelectorAll('#player-hand .card')].map(c => c.textContent.replace(/\(.*?\)/g, '') + ' ' + (c.title || '')).join('|');
+                const cardsZh = [...gd.querySelectorAll('#player-hand .card')].every(c => /[\u4e00-\u9fff]/.test(c.textContent));
+                const noEnTitles = !/Location|Industry|Wild|Cotton|Coal Mine|Iron Works|Pottery|Brewery|Manufacturer/.test(txt.replace(/class="card-name-en"/g, ''));
+                const enLines = [...gd.querySelectorAll('#player-hand .card-name-en')].map(e => e.textContent).join('');
+                check('hand cards: Chinese titles, no English type/industry words', cardsZh && !/Location|Industry|Wild|Cotton|Coal Mine|Iron Works|Pottery|Brewery|Manufacturer/.test(txt.split('').join('').replace(enLines, '')), txt);
+                void noEnTitles;
+                const li = hand.findIndex((_, i) => um.logic.getBuildTargetsForCard(um.myId, i).length);
+                gd.querySelectorAll('#player-hand .card')[li].click(); await sleep(20);
+                const hintEl = gd.getElementById('card-preview-hint');
+                check('card preview: legal-spot hint is a non-blocking toast', hintEl.classList.contains('cp-toast'));
+                const rects = um.logic.getBuildTargetsForCard(um.myId, li).map(t => um.renderer.slotBoardRect(t)).filter(Boolean);
+                let overl = [];
+                gd.querySelectorAll('#town-labels-layer .town-label:not(.label-over-lit)').forEach(lg => {
+                    const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(lg.getAttribute('transform')); const r = lg.querySelector('rect');
+                    const x = +m[1] + +r.getAttribute('x'), y = +m[2] + +r.getAttribute('y'), w = +r.getAttribute('width'), h = +r.getAttribute('height');
+                    if (rects.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y)) overl.push(lg.dataset.label);
+                });
+                check('card preview: no visible town label overlaps a lit slot', overl.length === 0, overl.join(','));
+                gd.querySelectorAll('#player-hand .card')[li].click(); await sleep(20);
+                gd.querySelectorAll('#player-hand .card')[hand.length - 1].click(); await sleep(20);
+            }
             check('card preview: at least one card has legal spots', sawSome);
             const last = hand.length - 1;
             gd.querySelectorAll('#player-hand .card')[last].click(); await sleep(20);

@@ -1593,6 +1593,22 @@ class BoardRenderer {
                 el.classList.add('highlight-slot');
             }
         }
+        this.hideLabelsOverSlots(validSlots);
+    }
+
+    // Hide any town/merchant label whose pill overlaps a lit slot, so labels
+    // never cover where the player can build.
+    hideLabelsOverSlots(slots) {
+        const rects = (slots || []).map(t => this.slotBoardRect(t)).filter(Boolean);
+        this.svg.querySelectorAll('.town-label').forEach(lg => {
+            const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(lg.getAttribute('transform') || '');
+            const r = lg.querySelector('rect');
+            if (!m || !r) return;
+            const x = +m[1] + +r.getAttribute('x'), y = +m[2] + +r.getAttribute('y');
+            const w = +r.getAttribute('width'), h = +r.getAttribute('height');
+            const hit = rects.some(b => x < b.x + b.w + 4 && x + w > b.x - 4 && y < b.y + b.h + 4 && y + h > b.y - 4);
+            lg.classList.toggle('label-over-lit', hit);
+        });
     }
 
     highlightConnections(validConnections) {
@@ -1680,6 +1696,7 @@ class BoardRenderer {
         this.svg.querySelectorAll('.chosen-slot').forEach(el => el.classList.remove('chosen-slot'));
         this.svg.querySelectorAll('.highlight-slot').forEach(el =>
             el.classList.remove('highlight-slot'));
+        this.svg.querySelectorAll('.label-over-lit').forEach(el => el.classList.remove('label-over-lit'));
         this.svg.querySelectorAll('.highlight').forEach(el =>
             el.classList.remove('highlight'));
     }
