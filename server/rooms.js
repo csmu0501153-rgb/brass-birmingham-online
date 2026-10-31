@@ -193,7 +193,7 @@ class Room {
                         return fail('Invalid second link');
                     return L.executeNetworkDouble(p, pd.connectionId, pd.connectionId2, ci);
                 }
-                return L.executeNetwork(p, pd.connectionId, ci);
+                return L.executeNetwork(p, pd.connectionId, ci, typeof pd.coalKey === 'string' ? pd.coalKey : null);
             }
             case A.DEVELOP: {
                 const types = L.getDevelopableTypes(p).map(t => t.type);
@@ -250,7 +250,7 @@ class Room {
             return;
         }
         this.tagCards();
-        if (st.currentPlayerId !== prev || r === 'endCanalEra')
+        if (st.currentPlayerId !== prev || r === 'endCanalEra' || st.actionsThisTurn === 0)
             this.addLog(null, `${st.currentPlayer.name}'s turn`, 'system');
     }
 

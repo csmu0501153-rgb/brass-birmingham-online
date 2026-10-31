@@ -84,6 +84,13 @@ class BoardRenderer {
         this.applyView();
     }
 
+    // While zoomed in, the board captures touch drags (pan); at full view the
+    // page scrolls normally on phones.
+    syncTouch() {
+        const zoomed = this.view.w < this.homeView.w - 0.5;
+        this.svg.style.touchAction = zoomed ? 'none' : 'pan-y pinch-zoom';
+    }
+
     resetView() {
         this.view = { ...this.homeView };
         this.applyView();
@@ -98,14 +105,56 @@ class BoardRenderer {
             this.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
         }, { passive: false });
 
+        // On-screen zoom buttons (touch devices have no wheel / keyboard).
+        const host = this.svg.parentNode;
+        if (host && host.appendChild && !host.querySelector('.board-zoom')) {
+            const bar = document.createElement('div');
+            bar.className = 'board-zoom';
+            const mk = (label, title, fn) => {
+                const b = document.createElement('button');
+                b.type = 'button'; b.textContent = label; b.title = title;
+                b.addEventListener('click', (ev) => { ev.stopPropagation(); fn(); });
+                bar.appendChild(b);
+            };
+            const centre = f => { const r = this.svg.getBoundingClientRect(); this.zoomAt(r.left + r.width / 2, r.top + r.height / 2, f); this.syncTouch(); };
+            mk('+', 'Zoom in', () => centre(1.4));
+            mk('−', 'Zoom out', () => centre(1 / 1.4));
+            mk('⟲', 'Fit board', () => { this.resetView(); this.syncTouch(); });
+            host.appendChild(bar);
+        }
+
+        // Two-finger pinch zoom.
+        const touches = new Map();
+        let pinchDist = null;
+        this.svg.addEventListener('pointerdown', (e) => {
+            if (e.pointerType !== 'touch') return;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size === 2) { const [a, b] = [...touches.values()]; pinchDist = Math.hypot(a.x - b.x, a.y - b.y); }
+        });
+        this.svg.addEventListener('pointermove', (e) => {
+            if (!touches.has(e.pointerId)) return;
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (touches.size === 2 && pinchDist) {
+                const [a, b] = [...touches.values()];
+                const d = Math.hypot(a.x - b.x, a.y - b.y);
+                if (d > 0 && Math.abs(d - pinchDist) > 4) {
+                    this.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / pinchDist);
+                    pinchDist = d; this.syncTouch();
+                }
+            }
+        });
+        const endTouch = (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinchDist = null; };
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => this.svg.addEventListener(t, endTouch));
+
         let pan = null, moved = false;
         this.svg.addEventListener('pointerdown', (e) => {
             if (this.calibrating || e.button !== 0) return;
+            if (touches.size > 1) { pan = null; return; }
             pan = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y };
             moved = false;
         });
         this.svg.addEventListener('pointermove', (e) => {
-            if (!pan) return;
+            if (!pan || touches.size > 1) return;
             const r = this.svg.getBoundingClientRect();
             const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
             if (!moved && Math.hypot(dx, dy) < 5) return;   // still a click, not a drag

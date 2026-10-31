@@ -88,7 +88,29 @@ async function load(url, errors, lang) {
         }
         const opp = um.state.players.find(p => p.id !== 0);
         check('client state has opponents\' hands only as hidden placeholders', opp.hand.every(c => c.type === 'hidden'));
+        check('lang toggle lives in the top bar (no overlap with log)', !!gd.querySelector('#top-bar .lang-toggle'));
+        check('player panels show 行動中 / 等待中 labels', gd.getElementById('player-panels').textContent.includes('等待中') && gd.getElementById('player-panels').textContent.includes('行動中'));
+        check('board zoom buttons present', gd.querySelectorAll('.board-zoom button').length === 3);
+        um.selectedAction = 'build'; um.actionStep = 0; um.updatePhaseBar(); await sleep(50);
+        const lbls = () => [...gd.querySelectorAll('.phase-step')].filter(x => !x.classList.contains('hidden')).map(x => x.querySelector('.phase-step-label').textContent).join('>');
+        check('build step bar: 選擇行動>選擇工業與地點>棄一張牌', lbls() === '選擇行動>選擇工業與地點>棄一張牌', lbls());
+        um.selectedAction = 'loan'; um.actionStep = 1; um.updatePhaseBar(); await sleep(50);
+        check('loan step bar has no 選擇目標 step', lbls() === '選擇行動>棄一張牌', lbls());
+        um.selectedAction = null; um.actionStep = 0; um.updatePhaseBar();
+        const probe = gd.createElement('div'); probe.textContent = 'Built Coal Mine Level 1 in Coventry'; gd.getElementById('game-log').appendChild(probe);
+        await sleep(50);
+        check('town names shown as 考文垂 Coventry in HTML text', probe.textContent.includes('考文垂 Coventry'), probe.textContent);
+        probe.remove();
         check('no JS errors on game page', errors.length === 0, '\n  ' + errors.join('\n  '));
+
+        // 2b) Invalid token -> only the error page
+        errors = [];
+        const bad = await load(urls[0].replace(/token=[0-9a-f]+/, 'token=' + '0'.repeat(32)), errors);
+        await sleep(800);
+        const bd = bad.window.document;
+        check('invalid token: error page shown', !bd.getElementById('fatal-error').classList.contains('hidden') && bd.getElementById('fatal-error').textContent.includes('無法加入遊戲'));
+        check('invalid token: game scaffold hidden', !bd.getElementById('game-screen').classList.contains('active') && bd.body.classList.contains('fatal-only'));
+        bad.window.close();
 
         // 3) English toggle
         errors = [];

@@ -1956,9 +1956,9 @@ h1, h2, h3 {
     #board-container {
         order: 1;
         width: 100%;
-        height: min(84vw, 36dvh);
+        height: min(94vw, 72dvh);
         min-height: 260px;
-        max-height: 520px;
+        max-height: 720px;
         flex: none;
         padding: 2px;
     }
@@ -2270,7 +2270,7 @@ h1, h2, h3 {
 /* ===================== Online multiplayer additions ===================== */
 .not-my-turn #action-buttons { pointer-events: none; opacity: 0.55; }
 .net-status { font-size: 12px; padding: 2px 8px; border-radius: 10px; margin: 0 8px; white-space: nowrap; }
-.net-online { background: #2e5d34; color: #d8f5dc; }
+.net-online { background: transparent; color: #8fbf95; }
 .net-connecting, .net-offline { background: #7a5a12; color: #fff3cf; }
 .net-fatal { background: #7a1f1f; color: #ffdede; }
 .me-chip { background: #c9a84c !important; color: #1a1510 !important; }
@@ -2291,6 +2291,18 @@ h1, h2, h3 {
 #fatal-error { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center;
     justify-content: center; z-index: 3000; }
 #fatal-error.hidden { display: none; }
-.lang-toggle { position: fixed; right: 10px; bottom: 10px; z-index: 4000; padding: 4px 10px; font-size: 12px;
+body.fatal-only #fatal-error { background: var(--bg-dark, #1a1510); }
+body.fatal-only #game-screen { display: none !important; }
+.lang-toggle { position: fixed; right: 10px; top: 8px; z-index: 4000; padding: 4px 10px; font-size: 12px;
     border-radius: 12px; border: 1px solid #c9a84c; background: #2a241c; color: #f0e6d2; cursor: pointer; opacity: 0.85; }
 .setup-form.hidden, .room-links.hidden, .setup-error.hidden { display: none; }
+
+.turn-chip { background: #c9a84c !important; color: #1a1510 !important; }
+.wait-chip { background: transparent !important; color: var(--text-muted) !important; border: 1px solid #555; }
+
+#board-container { position: relative; }
+.board-zoom { position: absolute; right: 8px; bottom: 8px; z-index: 5; display: flex; flex-direction: column; gap: 4px; }
+.board-zoom button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #c9a84c; background: rgba(42,36,28,0.9);
+    color: #f0e6d2; font-size: 18px; line-height: 1; cursor: pointer; }
+/* Language toggle: in the top bar flow on the game screen so it never covers the log/board. */
+#top-bar .lang-toggle { position: static; margin-left: auto; opacity: 1; flex: none; }

@@ -206,15 +206,31 @@ function setNetStatus(kind, message) {
         fatal: message || 'Invalid room link',
     }[kind] || '';
     if (kind === 'fatal') {
+        // Show ONLY the error page, not the empty game scaffold behind it.
+        document.getElementById('game-screen').classList.remove('active');
+        document.body.classList.add('fatal-only');
         const err = document.getElementById('fatal-error');
         err.querySelector('.fatal-error-msg').textContent = message || 'Invalid room link';
         err.classList.remove('hidden');
     }
 }
 
+// The language button lives in the top bar during a game so it never covers
+// the log or the board (it is created by i18n.js, possibly after this runs).
+function placeLangToggle() {
+    const move = () => {
+        const btn = document.querySelector('body > .lang-toggle');
+        const top = document.getElementById('top-bar');
+        if (btn && top) { top.appendChild(btn); return true; }
+        return !!document.querySelector('#top-bar .lang-toggle');
+    };
+    if (!move()) setTimeout(move, 0);
+}
+
 function startOnline(roomId, token) {
     document.getElementById('setup-screen').classList.remove('active');
     document.getElementById('game-screen').classList.add('active');
+    placeLangToggle();
 
     netClient = new NetClient(roomId, token, {
         status: setNetStatus,

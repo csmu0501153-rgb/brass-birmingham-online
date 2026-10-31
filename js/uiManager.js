@@ -217,7 +217,7 @@ class UIManager {
 
             panel.innerHTML = `
                 <div class="player-panel-header">
-                    <span class="player-panel-name" style="color: ${player.color}">${player.name}${player.isAI ? ' <span class="ai-chip">AI</span>' : ''}${player.id === this.myId ? ' <span class="ai-chip me-chip">You</span>' : ''}${!player.isAI && this.connected.length && !this.connected[player.id] ? ' <span class="ai-chip offline-chip">Offline</span>' : ''}</span>
+                    <span class="player-panel-name" style="color: ${player.color}">${player.name}${player.isAI ? ' <span class="ai-chip">AI</span>' : ''}${player.id === this.myId ? ' <span class="ai-chip me-chip">You</span>' : ''}${!player.isAI && this.connected.length && !this.connected[player.id] ? ' <span class="ai-chip offline-chip">Offline</span>' : ''}${this.state.gameOver ? '' : (isActive ? ' <span class="ai-chip turn-chip">Acting</span>' : ' <span class="ai-chip wait-chip">Waiting</span>')}</span>
                     <span class="player-panel-vp">${player.vp} <span style="font-size:10px;font-weight:400;color:var(--text-muted)">VP</span></span>
                 </div>
                 <div class="player-panel-stats">
@@ -554,6 +554,27 @@ class UIManager {
                 instructionText = 'Click a card to discard';
             }
         }
+
+        // Step labels follow the real order of prompts for each action.
+        // Loan / Scout / Pass have no target step: only action -> discard.
+        const noTarget = [ACTIONS.LOAN, ACTIONS.SCOUT, ACTIONS.PASS].includes(this.selectedAction);
+        const targetLabel = {
+            [ACTIONS.BUILD]: 'Choose Industry & Location', [ACTIONS.NETWORK]: 'Choose Link',
+            [ACTIONS.DEVELOP]: 'Choose Tiles', [ACTIONS.SELL]: 'Choose Industries to Sell',
+        }[this.selectedAction] || 'Select Target';
+        const discardLabel = this.selectedAction === ACTIONS.SCOUT ? 'Discard 3 Cards' : 'Discard Card';
+        const arrows = bar.querySelectorAll('.phase-step-arrow');
+        if (noTarget && currentStep === 2) currentStep = 3;
+        steps.forEach(step => {
+            const n = parseInt(step.dataset.step);
+            const lbl = step.querySelector('.phase-step-label');
+            const want = n === 1 ? 'Choose Action' : n === 2 ? targetLabel : discardLabel;
+            if (lbl && lbl.dataset.en !== want) { lbl.dataset.en = want; lbl.textContent = want; }
+            const num = step.querySelector('.phase-step-num');
+            if (num) num.textContent = (noTarget && n === 3) ? '2' : String(n);
+            step.classList.toggle('hidden', noTarget && n === 2);
+        });
+        if (arrows[1]) arrows[1].classList.toggle('hidden', noTarget);
 
         steps.forEach(step => {
             const stepNum = parseInt(step.dataset.step);

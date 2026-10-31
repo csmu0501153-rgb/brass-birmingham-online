@@ -46,3 +46,8 @@ npm test             # 伺服器整合測試（不需要瀏覽器）
 - `js/i18n.js`：中英切換
 - `test/run-tests.js`：整合測試（`npm test`）
 - `test/dom-smoke.js`：jsdom 冒煙測試（需要另外安裝 jsdom）
+
+## Rules notes (2026-10-31)
+- Rail-link coal: the closest connected unflipped coal mine (fewest links from either end of the new link, any owner) is used; the market only when no mine is connected (needs a merchant connection). Mines tied for nearest: the server accepts `pendingData.coalKey` (e.g. `"dudley_0"`) on a single-link Network action; without it the default is deterministic (first link end, then slot order). The UI does not yet show a picker for ties. Building industries uses the same nearest-first order.
+- Iron: any iron works, no connection (picked automatically). Beer: own breweries anywhere, opponents' must be connected, merchant beer only when selling to that merchant.
+- Pass = one action (discard 1 card). Only the first round of the game (canal era) has 1 action per player; every other round, including rail round 1, has 2 (official rulebook).

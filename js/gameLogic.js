@@ -398,7 +398,7 @@ class GameLogic {
         return targets;
     }
 
-    executeNetwork(playerId, connectionId, cardIndex) {
+    executeNetwork(playerId, connectionId, cardIndex, coalKey = null) {
         const player = this.state.players[playerId];
         const conn = CONNECTIONS.find(c => c.id === connectionId);
         if (!conn) return { success: false, message: 'Invalid connection' };
@@ -412,7 +412,7 @@ class GameLogic {
         } else {
             let totalCost = RAIL_LINK_COST;
             // Consume coal for rail — check both endpoints, use cheapest source
-            const src = this.findCheapestCoalForLink(conn, playerId);
+            const src = this.findCheapestCoalForLink(conn, playerId, coalKey);
             if (src) {
                 if (src.type === 'mine') {
                     this.state.consumeResource(src.key);
@@ -626,27 +626,35 @@ class GameLogic {
         };
     }
 
-    // Find the cheapest coal source reachable from either endpoint of a connection.
-    // Returns the best source object or null if no coal is available.
-    findCheapestCoalForLink(conn, playerId) {
-        const seen = new Set();
-        const candidates = [];
-
+    // Coal for a rail link (official rule): the CLOSEST connected unflipped
+    // coal mine (fewest links away from EITHER end of the new link), owned by
+    // any player. Price does not matter: all mine coal is free. Only when no
+    // mine is connected does coal come from the market (needs a merchant
+    // connection). Mines tied for nearest: the acting player may choose via
+    // `preferKey` (a mine key like "dudley_0"); otherwise the deterministic
+    // default is BFS order (link end order, then slot order).
+    getCoalMineOptionsForLink(conn, playerId) {
+        const best = new Map(); // key -> distance
         for (const cityId of conn.cities) {
-            const sources = this.state.findCoalSource(cityId, playerId);
-            for (const src of sources) {
-                const dedupeKey = src.type === 'mine' ? src.key : 'market';
-                if (!seen.has(dedupeKey)) {
-                    seen.add(dedupeKey);
-                    candidates.push(src);
-                }
+            for (const src of this.state.findCoalSource(cityId, playerId)) {
+                if (src.type !== 'mine') continue;
+                if (!best.has(src.key) || src.distance < best.get(src.key)) best.set(src.key, src.distance);
             }
         }
+        if (best.size === 0) return [];
+        const min = Math.min(...best.values());
+        return [...best.entries()].filter(([, d]) => d === min).map(([key, distance]) => ({ type: 'mine', key, distance, free: true }));
+    }
 
-        if (candidates.length === 0) return null;
-        // Prefer free (board mine) over market; among market entries pick lowest price
-        candidates.sort((a, b) => (a.free ? 0 : a.price) - (b.free ? 0 : b.price));
-        return candidates[0];
+    findCheapestCoalForLink(conn, playerId, preferKey = null) {
+        const mines = this.getCoalMineOptionsForLink(conn, playerId);
+        if (mines.length) return mines.find(m => m.key === preferKey) || mines[0];
+        let market = null;
+        for (const cityId of conn.cities) {
+            const m = this.state.findCoalSource(cityId, playerId).find(s => s.type === 'market');
+            if (m && (!market || m.price < market.price)) market = m;
+        }
+        return market;
     }
 
     // ========================================================================

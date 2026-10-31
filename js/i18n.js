@@ -38,7 +38,7 @@
         'Your Turn': '輪到你了', 'AI Turn': 'AI 回合', "Opponent's Turn": '對手回合',
         'Your Turn — choose bonus': '輪到你：請選擇商人獎勵',
         'Game Over': '遊戲結束', 'Empty': '已空',
-        'Choose Action': '選擇行動', 'Select Target': '選擇目標', 'Discard Card': '棄一張牌',
+        'Choose Action': '選擇行動', 'Choose Industry & Location': '選擇工業與地點', 'Choose Link': '選擇連線', 'Choose Tiles': '選擇要發展的板塊', 'Choose Industries to Sell': '選擇要販售的工業', 'Discard 3 Cards': '棄三張牌', 'Select Target': '選擇目標', 'Discard Card': '棄一張牌',
         'Select an action to begin': '請選擇一個行動', 'Select an action': '請選擇一個行動',
         'Cancel': '取消', 'Click a card to discard': '點選一張手牌棄掉',
         'Select what to build from the list': '從清單選擇要建造的工業',
@@ -52,7 +52,7 @@
         'Markets': '市場', 'Coal': '煤', 'Iron': '鐵', 'Coal:': '煤：', 'Iron:': '鐵：', 'FREE DEVELOP': '免費發展', 'Game Log': '遊戲紀錄',
         'Your Hand': '你的手牌', 'Actions': '行動', 'Your Industries': '你的工業板塊',
         'Money': '金錢', 'Income level': '收入等級', 'Cards': '手牌數', 'Links': '剩餘連線',
-        'VP': '勝利點', 'You': '你', 'Offline': '離線', 'AI': 'AI',
+        'VP': '勝利點', 'You': '你', 'Offline': '離線', 'Zoom in': '放大', 'Zoom out': '縮小', 'Fit board': '整張地圖', 'Acting': '行動中', 'Waiting': '等待中', 'AI': 'AI',
         // actions
         'Build': '建造', 'Network': '連線', 'Develop': '發展', 'Sell': '販售',
         'Loan': '借款', 'Scout': '偵察', 'Pass': '跳過',
@@ -180,6 +180,22 @@
         [/Beer: /g, () => '啤酒：'], [/\(Used\)/g, () => '（已使用）'], [/\(Available\)/g, () => '（可用）'],
     ];
 
+    // ---- Town / merchant names: '伯明罕 Birmingham' (HTML text only; the
+    // board SVG is left untouched). Idempotent thanks to the lookbehind.
+    const TOWNS = {
+        'Birmingham': '伯明罕', 'Coventry': '考文垂', 'Wolverhampton': '伍爾弗漢普頓', 'Dudley': '達德利',
+        'Stoke-on-Trent': '斯托克', 'Burton-on-Trent': '伯頓', 'Tamworth': '塔姆沃思', 'Coalbrookdale': '煤溪谷',
+        'Belper': '貝爾珀', 'Kidderminster': '基德明斯特', 'Worcester': '伍斯特', 'Redditch': '雷迪奇',
+        'Walsall': '沃爾索爾', 'Nuneaton': '農尼頓', 'Leek': '利克', 'Uttoxeter': '尤托克西特',
+        'Cannock': '坎諾克', 'Stafford': '斯塔福德', 'Derby': '德比', 'Nottingham': '諾丁漢',
+        'Gloucester': '格洛斯特', 'Oxford': '牛津', 'Warrington': '沃靈頓', 'Shrewsbury': '什魯斯伯里',
+        'Stone': '斯通',
+    };
+    const TOWN_RE = new RegExp(Object.keys(TOWNS).sort((a, b) => b.length - a.length)
+        .map(n => `(?<!${TOWNS[n]} )(?<![A-Za-z-])${n.replace(/-/g, '\\-')}(?![A-Za-z-])`).join('|'), 'g');
+    const townNames = s => s.replace(TOWN_RE, n => `${TOWNS[n]} ${n}`);
+    const townLabel = n => (lang === 'zh' && TOWNS[n]) ? `${TOWNS[n]} ${n}` : n;
+
     function tr(s) {
         if (lang !== 'zh' || !s) return s;
         if (Object.prototype.hasOwnProperty.call(D, s)) return D[s];
@@ -196,11 +212,19 @@
         return hit ? indName(out) : null;
     }
 
-    function translateString(s) {
+    function translateString(s, inSvg) {
         if (lang !== 'zh' || !s || !/[A-Za-z]/.test(s)) return null;
+        const t0 = translateCore(s, inSvg);
+        if (inSvg || /Brass/.test(s)) return t0;
+        const base = t0 === null ? s : t0;
+        const t1 = townNames(base);
+        return t1 === s ? null : t1;
+    }
+
+    function translateCore(s, inSvg) {
         if (s.includes('\n')) {
             const lines = s.split('\n');
-            const outs = lines.map(l => translateString(l));
+            const outs = lines.map(l => translateCore(l, inSvg));
             if (outs.every(o => o === null)) return null;
             return lines.map((l, i) => outs[i] === null ? l : outs[i]).join('\n');
         }
@@ -218,7 +242,8 @@
         if (node.nodeType === 3) {
             const p = node.parentNode;
             if (p && (p.nodeName === 'SCRIPT' || p.nodeName === 'STYLE' || p.nodeName === 'TEXTAREA')) return;
-            const t = translateString(node.nodeValue);
+            const inSvg = !!(p && p.closest && p.closest('svg'));
+            const t = translateString(node.nodeValue, inSvg);
             if (t !== null && t !== node.nodeValue) node.nodeValue = t;
             return;
         }
@@ -233,7 +258,7 @@
         for (const a of ATTRS) {
             if (node.hasAttribute && node.hasAttribute(a)) {
                 const v = node.getAttribute(a);
-                const t = translateString(v);
+                const t = translateString(v, !!(node.closest && node.closest('svg')));
                 if (t !== null && t !== v) node.setAttribute(a, t);
             }
         }
@@ -265,10 +290,11 @@
             try { localStorage.setItem(KEY, lang === 'zh' ? 'en' : 'zh'); } catch (_) { /* ignore */ }
             location.reload();
         });
+        // main.js moves it into the top bar on the game screen.
         document.body.appendChild(btn);
     }
 
-    window.I18N = { lang: () => lang, t: s => { const r = translateString(s); return r === null ? s : r; } };
+    window.I18N = { townLabel, lang: () => lang, t: s => { const r = translateString(s); return r === null ? s : r; } };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();

@@ -6,8 +6,16 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node test/run-tests.js"
+    "test": "node test/rules-tests.js && node test/run-tests.js",
+    "test:dom": "node test/dom-smoke.js"
   },
-  "engines": { "node": ">=18" },
-  "dependencies": { "ws": "^8.18.0" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
 }
