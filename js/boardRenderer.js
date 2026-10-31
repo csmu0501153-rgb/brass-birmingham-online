@@ -1581,7 +1581,81 @@ class BoardRenderer {
         }
     }
 
+    // Centre the view on a town (or farm) and zoom in so the chosen slot is
+    // obvious; uses the same viewBox pan/zoom as the on-screen controls.
+    focusOn(locId) {
+        const loc = (typeof CITIES !== 'undefined' && CITIES[locId]) || (typeof BREWERY_FARMS !== 'undefined' && BREWERY_FARMS[locId]);
+        if (!loc || !this.svg) return;
+        const narrow = (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760;
+        const scale = narrow ? 2.6 : 1.6;
+        const h = this.homeView;
+        this.view.w = h.w / scale; this.view.h = h.h / scale;
+        this.view.x = loc.x - this.view.w / 2; this.view.y = loc.y - this.view.h / 2;
+        this.clampView(); this.applyView();
+        if (this.syncTouch) this.syncTouch();
+        const host = this.svg.parentNode;
+        if (host && host.scrollIntoView && narrow) { try { host.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) { /* ignore */ } }
+    }
+
+    // Slot rectangle in board (SVG user) coordinates: walk translate()s up.
+    slotBoardRect(t) {
+        const el = isBreweryFarm(t.cityId)
+            ? this.svg.querySelector(`.brewery-farm[data-farm="${t.cityId}"]`)
+            : this.svg.querySelector(`.industry-slot[data-city="${t.cityId}"][data-slot="${t.slotIndex}"]`);
+        if (!el) return null;
+        const r = el.querySelector('rect');
+        let x = r ? parseFloat(r.getAttribute('x')) || 0 : -this.citySlotSize / 2;
+        let y = r ? parseFloat(r.getAttribute('y')) || 0 : -this.citySlotH / 2;
+        const w = r ? parseFloat(r.getAttribute('width')) || this.citySlotSize : this.citySlotSize;
+        const h = r ? parseFloat(r.getAttribute('height')) || this.citySlotH : this.citySlotH;
+        for (let n = r || el; n && n !== this.svg; n = n.parentNode) {
+            const m = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)/.exec((n.getAttribute && n.getAttribute('transform')) || '');
+            if (m) { x += parseFloat(m[1]); y += parseFloat(m[2]); }
+        }
+        return { x, y, w, h };
+    }
+
+    // Dim the whole board except the given slots, and draw pulsing rings on
+    // them. Purely visual: pointer-events pass through to the real slots.
+    showBuildFocus(targets, chosen) {
+        this.clearBuildFocus();
+        const NS = 'http://www.w3.org/2000/svg';
+        const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+        const layer = mk('g', { id: 'build-focus-layer', 'pointer-events': 'none' });
+        const h = this.homeView, pad = 6;
+        const mask = mk('mask', { id: 'build-focus-mask', maskUnits: 'userSpaceOnUse', x: h.x, y: h.y, width: h.w, height: h.h });
+        mask.appendChild(mk('rect', { x: h.x, y: h.y, width: h.w, height: h.h, fill: 'white' }));
+        const rings = [];
+        for (const t of targets) {
+            const b = this.slotBoardRect(t);
+            if (!b) continue;
+            mask.appendChild(mk('rect', { x: b.x - pad, y: b.y - pad, width: b.w + pad * 2, height: b.h + pad * 2, rx: 6, fill: 'black' }));
+            const isChosen = chosen && chosen.cityId === t.cityId && chosen.slotIndex === t.slotIndex;
+            rings.push(mk('rect', { class: 'bp-ring' + (isChosen ? ' bp-ring-chosen' : ''), 'data-city': t.cityId, 'data-slot': t.slotIndex,
+                x: b.x - pad, y: b.y - pad, width: b.w + pad * 2, height: b.h + pad * 2, rx: 6, fill: 'none' }));
+        }
+        const defs = mk('defs', {}); defs.appendChild(mask); layer.appendChild(defs);
+        layer.appendChild(mk('rect', { class: 'bp-dim', x: h.x, y: h.y, width: h.w, height: h.h, fill: 'rgba(8,6,4,0.62)', mask: 'url(#build-focus-mask)' }));
+        rings.forEach(r => layer.appendChild(r));
+        this.svg.appendChild(layer);
+    }
+
+    clearBuildFocus() {
+        const l = this.svg && this.svg.querySelector('#build-focus-layer');
+        if (l) l.remove();
+    }
+
+    markChosenSlot(t) {
+        this.svg.querySelectorAll('.chosen-slot').forEach(el => el.classList.remove('chosen-slot'));
+        const el = isBreweryFarm(t.cityId)
+            ? this.svg.querySelector(`.brewery-farm[data-farm="${t.cityId}"]`)
+            : this.svg.querySelector(`.industry-slot[data-city="${t.cityId}"][data-slot="${t.slotIndex}"]`);
+        if (el) el.classList.add('chosen-slot');
+    }
+
     clearHighlights() {
+        this.clearBuildFocus();
+        this.svg.querySelectorAll('.chosen-slot').forEach(el => el.classList.remove('chosen-slot'));
         this.svg.querySelectorAll('.highlight-slot').forEach(el =>
             el.classList.remove('highlight-slot'));
         this.svg.querySelectorAll('.highlight').forEach(el =>

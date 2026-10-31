@@ -2312,3 +2312,45 @@ body.fatal-only #game-screen { display: none !important; }
 /* The turn banner is informational only: never let it swallow clicks on the
    action buttons (e.g. 跳過) while it is shown or fading out. */
 #turn-transition { pointer-events: none; }
+
+/* ---- Build flow: location selection ---------------------------------- */
+#game-board.build-select-mode .industry-slot:not(.highlight-slot),
+#game-board.build-select-mode .brewery-farm:not(.highlight-slot) { opacity: 0.28; transition: opacity .2s; }
+#game-board.build-select-mode .connection-line { opacity: 0.45; }
+#game-board .highlight-slot { stroke: #ffd36e !important; stroke-width: 4px !important; cursor: pointer;
+    animation: pulse-glow 1.1s ease-in-out infinite, bp-ring 1.1s ease-in-out infinite; }
+@keyframes bp-ring { 0%,100% { stroke-opacity: 1; } 50% { stroke-opacity: .35; } }
+#game-board .chosen-slot { stroke: #6ef0a0 !important; stroke-width: 5px !important; animation: pulse-glow .9s ease-in-out infinite; }
+#game-screen.build-picking #markets-panel,
+#game-screen.build-picking #player-panels { opacity: .45; transition: opacity .2s; }
+#build-panel { position: fixed; left: 12px; bottom: 12px; z-index: 900; width: 360px; max-height: 55vh; overflow: auto;
+    background: rgba(28,22,16,.97); color: #f3e6c8; border: 1px solid #c9a24b; border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5); padding: 10px 12px; font-size: 14px; }
+#build-panel.hidden { display: none; }
+#build-panel .bp-head { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+#build-panel .bp-title { flex: 1; font-weight: 700; }
+#build-panel .bp-hint { font-size: 12px; opacity: .75; margin-bottom: 6px; }
+#build-panel button { min-height: 36px; }
+#build-panel .bp-industries { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#build-panel .bp-industry { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px;
+    background: #3a2e20; color: inherit; border: 1px solid #6b5530; border-radius: 8px; cursor: pointer; }
+#build-panel .bp-ind-icon svg { width: 28px; height: 28px; }
+#build-panel .bp-ind-meta { font-size: 11px; opacity: .75; }
+#build-panel .bp-town { margin-bottom: 8px; }
+#build-panel .bp-town-name { font-weight: 700; color: #ffd36e; border-bottom: 1px solid #5a4628; margin-bottom: 4px; padding-bottom: 2px; }
+#build-panel .bp-tag { font-size: 11px; font-weight: 400; background: #2f5a3a; color: #cfe; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+#build-panel .bp-slot { display: flex; flex-wrap: wrap; justify-content: space-between; width: 100%; text-align: left; gap: 4px;
+    background: #3a2e20; color: inherit; border: 1px solid #6b5530; border-radius: 6px; padding: 6px 8px; margin: 3px 0; cursor: pointer; }
+#build-panel .bp-slot:hover, #build-panel .bp-industry:hover { border-color: #ffd36e; }
+#build-panel .bp-slot-cost { font-variant-numeric: tabular-nums; color: #ffe2a0; }
+#build-panel .bp-over { border-color: #d9822b; }
+#build-panel .bp-over-tag { width: 100%; font-size: 12px; color: #ffb36b; }
+#build-panel .bp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#build-panel .bp-confirm-text { flex: 1 1 200px; }
+#build-panel .bp-confirm-btns { display: flex; gap: 6px; }
+#build-panel.bp-step-confirm { max-height: none; }
+@media (max-width: 760px) {
+    #build-panel { left: 6px; right: 6px; bottom: 6px; width: auto; max-height: 42vh; font-size: 13px; }
+}
+#game-board .bp-ring { stroke: #ffd36e; stroke-width: 4; animation: bp-ring 1.1s ease-in-out infinite; filter: drop-shadow(0 0 6px rgba(255,208,110,.9)); }
+#game-board .bp-ring-chosen { stroke: #6ef0a0; stroke-width: 5; filter: drop-shadow(0 0 8px rgba(110,240,160,.95)); }

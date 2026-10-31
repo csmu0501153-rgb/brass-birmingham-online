@@ -146,6 +146,49 @@ async function load(url, errors, lang) {
         await sleep(50);
         check('town names shown as 考文垂 Coventry in HTML text', probe.textContent.includes('考文垂 Coventry'), probe.textContent);
         probe.remove();
+        // Build flow: industry -> highlighted slots + grouped list -> confirm panel
+        {
+            const saved = { a: um.selectedAction, s: um.actionStep, cpi: um.state.currentPlayerIndex };
+            um.state.currentPlayerIndex = um.state.turnOrder ? um.state.turnOrder.indexOf(0) : 0;
+            console.log('INFO  build targets for seat', um.state.currentPlayerId, um.logic.getValidBuildTargets(um.state.currentPlayerId).length);
+            um.selectedAction = 'build'; um.actionStep = 0; um.pendingData = {};
+            um.startBuild(um.state.currentPlayerId); await sleep(50);
+            const bp = gd.getElementById('build-panel');
+            const all = um.pendingData.buildTargets || [];
+            check('build: build panel shown (not modal)', bp && !bp.classList.contains('hidden') && gd.getElementById('modal-overlay').classList.contains('hidden'));
+            check('build: other UI dimmed (build-picking)', gd.getElementById('game-screen').classList.contains('build-picking'));
+            const indBtn = gd.querySelector('#build-panel .bp-industry');
+            if (indBtn) indBtn.click(); await sleep(50);
+            const type = um.pendingData.buildIndustry;
+            const legal = all.filter(t => t.industryType === type);
+            const hl = [...gd.querySelectorAll('#game-board .highlight-slot')];
+            const want = new Set(legal.map(t => t.cityId + ':' + t.slotIndex));
+            const got = new Set(hl.map(e => e.dataset.farm ? e.dataset.farm + ':0' : e.dataset.city + ':' + e.dataset.slot));
+            check('build: ONLY legal slots for chosen industry highlighted', legal.length > 0 && want.size === got.size && [...want].every(k => got.has(k)), [...want] + ' vs ' + [...got]);
+            check('build: board in dim mode', gd.getElementById('game-board').classList.contains('build-select-mode'));
+            const towns = [...gd.querySelectorAll('#build-panel .bp-town')];
+            check('build: list grouped by town (one header per town)', towns.length === new Set(legal.map(t => t.cityId)).size && towns.every(x => x.querySelector('.bp-town-name')));
+            const slotTxt = gd.querySelector('#build-panel .bp-slot') ? gd.querySelector('#build-panel .bp-slot').textContent : '';
+            check('build: slot button reads 第 N 格（可蓋：…） + £ cost', /第 \d+ 格（可蓋：/.test(slotTxt) && /£\d+/.test(slotTxt), slotTxt);
+            check('build: town header uses 中文 + English name', /[\u4e00-\u9fff].* [A-Z]/.test(towns[0] ? towns[0].textContent : ''), towns[0] && towns[0].textContent);
+            // tap a highlighted slot on the board
+            const el = hl[0];
+            if (el) el.dispatchEvent(new g.window.MouseEvent('click', { bubbles: true }));
+            await sleep(50);
+            if (!um.pendingData.buildChoice) { // not my turn: board clicks ignored -> use list
+                gd.querySelector('#build-panel .bp-slot').click(); await sleep(50);
+            }
+            const conf = gd.querySelector('#build-panel .bp-confirm');
+            check('build: confirm panel one-liner 在〈城鎮〉第 N 格 建造…費用 £X，使用煤 N／鐵 N', conf && /在 〈.+〉 第 \d+ 格 建造 〈.+ 等級\d〉，費用 £\d+，使用煤 \d+／鐵 \d+/.test(conf.textContent), conf && conf.textContent);
+            check('build: confirm panel has 確認 and 取消', conf && conf.textContent.includes('確認') && conf.textContent.includes('取消'));
+            check('build: board zoomed to town', gd.getElementById('game-board').getAttribute('viewBox') !== '-46 -46 992 942', gd.getElementById('game-board').getAttribute('viewBox'));
+            check('build: step bar still 選擇工業與地點 active', (gd.querySelector('.phase-step.active .phase-step-label') || {}).textContent === '選擇工業與地點');
+            const chosen = um.pendingData.buildChoice;
+            gd.querySelector('#build-panel [data-bp="ok"]').click(); await sleep(50);
+            check('build: 確認 -> discard step, pendingData set, panel hidden', um.actionStep === 1 && um.pendingData.cityId === chosen.cityId && um.pendingData.slotIndex === chosen.slotIndex && bp.classList.contains('hidden') && !gd.getElementById('game-screen').classList.contains('build-picking'));
+            check('build: step bar now 棄一張牌', (gd.querySelector('.phase-step.active .phase-step-label') || {}).textContent === '棄一張牌');
+            um.cancelAction(); um.selectedAction = saved.a; um.actionStep = saved.s; um.state.currentPlayerIndex = saved.cpi;
+        }
         check('no JS errors on game page', errors.length === 0, '\n  ' + errors.join('\n  '));
 
         // 2b) Invalid token -> only the error page

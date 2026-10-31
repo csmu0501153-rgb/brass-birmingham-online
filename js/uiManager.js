@@ -593,7 +593,10 @@ class UIManager {
 
     getTargetInstruction() {
         switch (this.selectedAction) {
-            case ACTIONS.BUILD: return 'Select what to build from the list';
+            case ACTIONS.BUILD:
+                if (!this.pendingData.buildIndustry) return 'Choose which industry to build';
+                if (!this.pendingData.buildChoice) return 'Tap a glowing slot on the board or pick from the list';
+                return 'Confirm the location';
             case ACTIONS.NETWORK: return 'Select a connection to build';
             case ACTIONS.DEVELOP: return 'Select a tile to develop';
             case ACTIONS.SELL: return 'Select industries to sell';
@@ -724,6 +727,7 @@ class UIManager {
         this.pendingData = {};
         this.selectedCard = null;
         this.renderer.clearHighlights();
+        this.hideBuildPanel();
         this.updateActionButtons();
         this.updateHand();
         this.updatePhaseBar();
@@ -773,61 +777,167 @@ class UIManager {
             this.cancelAction();
             return;
         }
-
-        // Store targets for board-click selection
         this.pendingData.buildTargets = targets;
-
-        // Highlight valid slots on the board
-        this.renderer.highlightSlots(targets);
-
-        this.showBuildModal(playerId, targets);
+        this.pendingData.buildIndustry = null;
+        const types = [...new Set(targets.map(t => t.industryType))];
+        if (types.length === 1) this.chooseBuildIndustry(types[0]);
+        else this.showBuildIndustryPicker(targets);
     }
 
-    showBuildModal(playerId, targets) {
-        const byCity = {};
-        for (const t of targets) {
-            if (!byCity[t.cityId]) byCity[t.cityId] = [];
-            byCity[t.cityId].push(t);
-        }
+    // ---- helpers for the build flow (localised directly; panel is data-no-i18n)
+    bzh() { return !window.I18N || window.I18N.lang() === 'zh'; }
+    bL(zh, en) { return this.bzh() ? zh : en; }
+    bTown(id) {
+        const n = CITIES[id]?.name || BREWERY_FARMS[id]?.name || id;
+        if (BREWERY_FARMS[id]) return this.bL(id === 'northern' ? '北方農場酒廠' : '南方農場酒廠', n);
+        return window.I18N ? window.I18N.townLabel(n) : n;
+    }
+    bInd(type) {
+        const n = INDUSTRY_DISPLAY[type]?.name || type;
+        return window.I18N ? window.I18N.t(n) : n;
+    }
+    bCost(t) {
+        const parts = [`£${t.cost.total}`];
+        if (t.cost.coal > 0) parts.push(this.bL(`需煤 ${t.cost.coal}`, `${t.cost.coal} coal`));
+        if (t.cost.iron > 0) parts.push(this.bL(`需鐵 ${t.cost.iron}`, `${t.cost.iron} iron`));
+        return parts.join(' · ');
+    }
+    bEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
 
-        let html = '<div class="choice-list">';
-        for (const [cityId, cityTargets] of Object.entries(byCity)) {
-            const cityName = CITIES[cityId]?.name || BREWERY_FARMS[cityId]?.name || cityId;
-            for (const target of cityTargets) {
-                const display = INDUSTRY_DISPLAY[target.industryType];
-                html += `
-                    <div class="choice-item" data-city="${target.cityId}"
-                         data-slot="${target.slotIndex}" data-type="${target.industryType}">
-                        <div class="choice-item-icon">${display.icon}</div>
-                        <div class="choice-item-text">
-                            <div class="choice-item-name">${display.name} Lv${target.tileData.level}</div>
-                            <div class="choice-item-detail">${cityName} (Slot ${target.slotIndex + 1})</div>
-                        </div>
-                        <div class="choice-item-cost">£${target.cost.total}
-                            ${target.cost.coal > 0 ? ` + ${target.cost.coal} coal` : ''}
-                            ${target.cost.iron > 0 ? ` + ${target.cost.iron} iron` : ''}
-                        </div>
-                    </div>
-                `;
-            }
+    getBuildPanel() {
+        let p = document.getElementById('build-panel');
+        if (!p) {
+            p = document.createElement('div');
+            p.id = 'build-panel';
+            p.setAttribute('data-no-i18n', '');
+            (document.getElementById('game-screen') || document.body).appendChild(p);
+        }
+        p.classList.remove('hidden');
+        document.getElementById('game-screen')?.classList.add('build-picking');
+        return p;
+    }
+
+    hideBuildPanel() {
+        const p = document.getElementById('build-panel');
+        if (p) { p.classList.add('hidden'); p.innerHTML = ''; }
+        document.getElementById('game-screen')?.classList.remove('build-picking');
+        this.renderer.svg?.classList.remove('build-select-mode');
+    }
+
+    showBuildIndustryPicker(targets) {
+        this.renderer.clearHighlights();
+        this.renderer.svg?.classList.remove('build-select-mode');
+        const byType = {};
+        for (const t of targets) (byType[t.industryType] = byType[t.industryType] || []).push(t);
+        let html = `<div class="bp-head"><span class="bp-title">${this.bL('要建造哪一種產業？', 'Which industry?')}</span>
+            <button class="bp-cancel btn-small" data-bp="cancel">${this.bL('取消', 'Cancel')}</button></div><div class="bp-industries">`;
+        for (const [type, ts] of Object.entries(byType)) {
+            const towns = new Set(ts.map(t => t.cityId)).size;
+            const minCost = Math.min(...ts.map(t => t.cost.total));
+            html += `<button class="bp-industry" data-type="${type}">
+                <span class="bp-ind-icon">${INDUSTRY_DISPLAY[type]?.icon || ''}</span>
+                <span class="bp-ind-name">${this.bEsc(this.bInd(type))} ${this.bL('等級', 'Lv')}${ts[0].tileData.level}</span>
+                <span class="bp-ind-meta">${this.bL(`${towns} 個城鎮 · £${minCost} 起`, `${towns} towns · from £${minCost}`)}</span></button>`;
         }
         html += '</div>';
+        const p = this.getBuildPanel();
+        p.className = 'bp-step-industry';
+        p.innerHTML = html;
+        p.querySelector('[data-bp="cancel"]').addEventListener('click', () => this.cancelAction());
+        p.querySelectorAll('.bp-industry').forEach(b => b.addEventListener('click', () => this.chooseBuildIndustry(b.dataset.type)));
+        this.updatePhaseBar();
+    }
 
-        this.showModal('Build Industry', html, () => {});
+    chooseBuildIndustry(type) {
+        this.pendingData.buildIndustry = type;
+        this.pendingData.buildChoice = null;
+        const ts = this.pendingData.buildTargets.filter(t => t.industryType === type);
+        this.renderer.highlightSlots(ts);
+        this.renderer.showBuildFocus?.(ts);
+        this.renderer.svg?.classList.add('build-select-mode');
+        this.showBuildSlotList(ts);
+        this.updatePhaseBar();
+    }
 
-        document.querySelectorAll('#modal-body .choice-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const cityId = item.dataset.city;
-                const slotIndex = parseInt(item.dataset.slot);
-                const indType = item.dataset.type;
-                this.pendingData = { cityId, slotIndex, industryType: indType };
-                this.closeModal();
-                this.renderer.clearHighlights();
-                this.actionStep = 1;
-                this.updatePhaseBar();
-                this.updateHand();
-            });
-        });
+    // Grouped-by-town slot list; towns in my network / with a location card first.
+    showBuildSlotList(ts) {
+        const pid = this.state.currentPlayerId;
+        const me = this.state.players[pid];
+        const hasLoc = id => (me?.hand || []).some(c => c.location === id);
+        const groups = {};
+        for (const t of ts) (groups[t.cityId] = groups[t.cityId] || []).push(t);
+        const rank = id => (this.state.isInNetwork && this.state.isInNetwork(pid, id) ? 2 : 0) + (hasLoc(id) ? 1 : 0);
+        const ids = Object.keys(groups).sort((a, b) => rank(b) - rank(a) || this.bTown(a).localeCompare(this.bTown(b)));
+        const multi = new Set(this.pendingData.buildTargets.map(t => t.industryType)).size > 1;
+        let html = `<div class="bp-head"><span class="bp-title">${this.bL(`選擇 ${this.bEsc(this.bInd(ts[0].industryType))} 的位置`, `Where to build ${this.bEsc(this.bInd(ts[0].industryType))}?`)}</span>
+            ${multi ? `<button class="btn-small" data-bp="back">${this.bL('換產業', 'Change')}</button>` : ''}
+            <button class="bp-cancel btn-small" data-bp="cancel">${this.bL('取消', 'Cancel')}</button></div>
+            <div class="bp-hint">${this.bL('點地圖上發光的格子，或從下方清單選擇', 'Tap a glowing slot on the board, or pick below')}</div><div class="bp-groups">`;
+        for (const id of ids) {
+            const r = rank(id);
+            const tag = r >= 2 ? this.bL('在你的網路', 'in network') : r === 1 ? this.bL('有地點牌', 'location card') : '';
+            html += `<div class="bp-town" data-city="${id}"><div class="bp-town-name">${this.bEsc(this.bTown(id))}${tag ? ` <span class="bp-tag">${tag}</span>` : ''}</div>`;
+            for (const t of groups[id].sort((a, b) => a.slotIndex - b.slotIndex)) {
+                const allowed = CITIES[id] ? [].concat(CITIES[id].slots[t.slotIndex]) : [INDUSTRY_TYPES.BREWERY];
+                const ex = this.bExisting(t);
+                const over = ex ? (ex.playerId === pid ? this.bL('⚠ 覆蓋自己的板塊', '⚠ overbuilds your tile') : this.bL('⚠ 覆蓋對手板塊', '⚠ overbuilds opponent')) : '';
+                html += `<button class="bp-slot${ex ? ' bp-over' : ''}" data-city="${id}" data-slot="${t.slotIndex}">
+                    <span class="bp-slot-name">${this.bL(`第 ${t.slotIndex + 1} 格（可蓋：${allowed.map(a => this.bEsc(this.bInd(a))).join('／')}）`, `Slot ${t.slotIndex + 1} (${allowed.map(a => this.bEsc(this.bInd(a))).join(' / ')})`)}</span>
+                    <span class="bp-slot-cost">${this.bCost(t)}</span>${over ? `<span class="bp-over-tag">${over}</span>` : ''}</button>`;
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+        const p = this.getBuildPanel();
+        p.className = 'bp-step-slot';
+        p.innerHTML = html;
+        p.querySelector('[data-bp="cancel"]').addEventListener('click', () => this.cancelAction());
+        p.querySelector('[data-bp="back"]')?.addEventListener('click', () => { this.pendingData.buildIndustry = null; this.showBuildIndustryPicker(this.pendingData.buildTargets); });
+        p.querySelectorAll('.bp-slot').forEach(b => b.addEventListener('click', () =>
+            this.selectBuildSlot(b.dataset.city, parseInt(b.dataset.slot))));
+    }
+
+    bExisting(t) {
+        return BREWERY_FARMS[t.cityId] ? this.state.breweryFarmTiles?.[t.cityId] : this.state.boardIndustries?.[`${t.cityId}_${t.slotIndex}`];
+    }
+
+    selectBuildSlot(cityId, slotIndex) {
+        const type = this.pendingData.buildIndustry;
+        const t = (this.pendingData.buildTargets || []).find(x => x.cityId === cityId && x.slotIndex === slotIndex && x.industryType === type);
+        if (!t) return;
+        this.pendingData.buildChoice = t;
+        this.renderer.highlightSlots([t]);
+        this.renderer.markChosenSlot?.(t);
+        this.renderer.showBuildFocus?.([t], t);
+        this.renderer.focusOn?.(cityId);
+        const ex = this.bExisting(t);
+        const over = ex ? this.bL('（覆蓋原有板塊）', ' (overbuild)') : '';
+        const msg = this.bL(`在 〈${this.bEsc(this.bTown(cityId))}〉 第 ${slotIndex + 1} 格 建造 〈${this.bEsc(this.bInd(type))} 等級${t.tileData.level}〉，費用 £${t.cost.total}，使用煤 ${t.cost.coal}／鐵 ${t.cost.iron}${over}`,
+            `Build ${this.bEsc(this.bInd(type))} Lv${t.tileData.level} in ${this.bEsc(this.bTown(cityId))} slot ${slotIndex + 1}, cost £${t.cost.total}, coal ${t.cost.coal} / iron ${t.cost.iron}${over}`);
+        const p = this.getBuildPanel();
+        p.className = 'bp-step-confirm';
+        p.innerHTML = `<div class="bp-confirm"><span class="bp-confirm-text">${msg}</span>
+            <span class="bp-confirm-btns"><button class="btn-primary btn-small" data-bp="ok">${this.bL('確認', 'Confirm')}</button>
+            <button class="btn-small" data-bp="no">${this.bL('取消', 'Cancel')}</button></span></div>`;
+        p.querySelector('[data-bp="ok"]').addEventListener('click', () => this.confirmBuildSlot());
+        p.querySelector('[data-bp="no"]').addEventListener('click', () => this.chooseBuildIndustry(type));
+    }
+
+    confirmBuildSlot() {
+        const t = this.pendingData.buildChoice;
+        if (!t) return;
+        this.pendingData = { cityId: t.cityId, slotIndex: t.slotIndex, industryType: t.industryType };
+        this.hideBuildPanel();
+        this.renderer.clearHighlights();
+        this.actionStep = 1;
+        this.updatePhaseBar();
+        this.updateHand();
+    }
+
+    // Legacy entry point (kept for callers): now opens the grouped slot list.
+    showBuildModal(playerId, targets) {
+        if (!this.pendingData.buildTargets) this.pendingData.buildTargets = targets;
+        this.chooseBuildIndustry(this.pendingData.buildIndustry || targets[0].industryType);
     }
 
     // ========================================================================
@@ -1155,6 +1265,8 @@ class UIManager {
         // Send ONE complete action to the server; it validates and applies it.
         const pendingData = { ...this.pendingData };
         delete pendingData.buildTargets;
+        delete pendingData.buildIndustry;
+        delete pendingData.buildChoice;
         this.sendAction({
             action,
             pendingData,
@@ -1207,43 +1319,14 @@ class UIManager {
         if (!target) return;
 
         if (this.selectedAction === ACTIONS.BUILD && this.actionStep === 0) {
-            // Farm brewery clicks
+            if (!this.pendingData.buildIndustry) return; // choose the industry first
             const farm = target.closest('.brewery-farm');
-            if (farm && farm.classList.contains('highlight-slot')) {
-                const farmId = farm.dataset.farm;
-                const farmTargets = (this.pendingData.buildTargets || []).filter(t => t.cityId === farmId);
-                if (farmTargets.length >= 1) {
-                    this.pendingData = { cityId: farmId, slotIndex: 0, industryType: INDUSTRY_TYPES.BREWERY };
-                    this.closeModal();
-                    this.renderer.clearHighlights();
-                    this.actionStep = 1;
-                    this.updatePhaseBar();
-                    this.updateHand();
-                    return;
-                }
-            }
-
+            if (farm && farm.classList.contains('highlight-slot')) { this.selectBuildSlot(farm.dataset.farm, 0); return; }
             const slot = target.closest('.industry-slot');
             if (slot && slot.classList.contains('highlight-slot')) {
-                const cityId = slot.dataset.city;
-                const slotIndex = parseInt(slot.dataset.slot);
-                const targets = (this.pendingData.buildTargets || []).filter(
-                    t => t.cityId === cityId && t.slotIndex === slotIndex
-                );
-                if (targets.length === 1) {
-                    // Single option for this slot — select it directly
-                    this.pendingData = { cityId, slotIndex, industryType: targets[0].industryType };
-                    this.closeModal();
-                    this.renderer.clearHighlights();
-                    this.actionStep = 1;
-                    this.updatePhaseBar();
-                    this.updateHand();
-                } else if (targets.length > 1) {
-                    // Multiple types for this slot — show filtered modal
-                    this.closeModal();
-                    this.showBuildModal(this.state.currentPlayerId, targets);
-                }
+                this.selectBuildSlot(slot.dataset.city, parseInt(slot.dataset.slot));
             }
+            return;
         }
 
         if (this.selectedAction === ACTIONS.NETWORK) {
