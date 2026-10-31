@@ -1,0 +1,6 @@
+.DS_Store
+*.log
+screenshots/capture.js
+progress.md
+node_modules/
+data/

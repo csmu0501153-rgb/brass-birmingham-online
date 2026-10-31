@@ -1,0 +1,13 @@
+{
+  "name": "brass-birmingham-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online multiplayer (server-authoritative) Brass: Birmingham fan game",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node test/run-tests.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
