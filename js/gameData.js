@@ -40,9 +40,24 @@ const CARD_TYPES = {
 };
 
 // Player colors matching the physical game
-const PLAYER_COLORS = ['#c0392b', '#f39c12', '#8e44ad', '#d9d0c2'];
+// Single shared palette: board tiles, links, VP badges, player panel, log and
+// hand-area names all read from here (via playerColor()). Chosen for maximum
+// separation: true red, clear yellow (not orange), violet, near-white.
+const PLAYER_COLORS = ['#e53935', '#ffd400', '#a64dff', '#f4f4f4'];
+const PLAYER_TEXT_ON = ['#fff', '#111', '#fff', '#111'];
+function playerColor(p) {
+    if (p == null) return '#fff';
+    const idx = PLAYER_NAMES.indexOf(p.colorName);
+    if (idx >= 0) return PLAYER_COLORS[idx];
+    if (typeof p.id === 'number' && PLAYER_COLORS[p.id]) return PLAYER_COLORS[p.id];
+    return p.color || '#fff';
+}
+function playerTextOn(p) {
+    const i = PLAYER_COLORS.indexOf(playerColor(p));
+    return i >= 0 ? PLAYER_TEXT_ON[i] : '#fff';
+}
 const PLAYER_NAMES = ['Red', 'Yellow', 'Purple', 'White'];
-const PLAYER_BG_COLORS = ['#922b21', '#b7770d', '#6c3483', '#b8b0a2'];
+const PLAYER_BG_COLORS = ['#a52622', '#b89800', '#7432b8', '#b8b8b8'];
 
 // ============================================================================
 // Industry Tile Data (from TTS Brass Birmingham implementation)

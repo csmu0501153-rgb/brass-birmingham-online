@@ -141,6 +141,37 @@ async function load(url, errors, lang) {
                 gd.querySelector(`#built-links-layer [data-link="${conn.id}"]`).dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
                 check('tapping link shows Chinese VP breakdown', /運河目前值 \+\d+ 分/.test(um.renderer.lastLinkInfo || ''), um.renderer.lastLinkInfo);
                 check('built tiles carry owner-colour ring', [...gd.querySelectorAll('.tile-owner-ring')].some(r => r.getAttribute('stroke') === st.players[1].color) || gd.querySelectorAll('.built-tile').length > 0);
+                {
+                    // Four players, four distinct colours: tiles, links, badges and
+                    // panel names must all use the shared PLAYER_COLORS palette.
+                    const PC = W.eval('PLAYER_COLORS'); const NAMES = W.eval('PLAYER_NAMES');
+                    check('palette: 4 distinct player colours', new Set(PC.map(c => c.toLowerCase())).size === 4, PC.join(','));
+                    const savedPlayers = st.players.slice();
+                    while (st.players.length < 4) { const i = st.players.length; st.players.push(Object.assign({}, st.players[0], { id: i, name: 'P' + (i + 1), color: PC[i], colorName: NAMES[i], isAI: true })); }
+                    const conns = W.eval('CONNECTIONS').filter(c => c.canal).slice(0, 4);
+                    const savedLinks = st.boardLinks; st.boardLinks = {};
+                    conns.forEach((c, i) => { st.boardLinks[c.id] = { playerId: i, type: 'canal' }; });
+                    const four = {}; let k = 0;
+                    for (const cid of Object.keys(W.eval('CITIES'))) { if (k >= 4) break; if (!savedInd[cid + '_0']) { four[cid + '_0'] = mkTile(k, 'coalMine', 1, k % 2 === 0); k++; } }
+                    st.boardIndustries = { ...savedInd, ...four };
+                    um.renderer.fullUpdate(st); um.updateUI && um.updateUI();
+                    const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`; };
+                    const panelNames = [...gd.querySelectorAll('.player-panel-name')];
+                    for (let i = 0; i < 4; i++) {
+                        const c = PC[i];
+                        const ring = gd.querySelector(`.tile-owner-ring[data-owner="${i}"]`);
+                        const tint = gd.querySelector(`.tile-owner-tint[data-owner="${i}"]`);
+                        const link = gd.querySelector(`#built-links-layer .link-body[data-owner="${i}"]`);
+                        const pn = panelNames.find(el => el.textContent.startsWith(st.players[i].name));
+                        const pnc = pn && (pn.style.color.startsWith('#') ? pn.style.color : pn.style.color);
+                        check(`player ${i + 1}: tile ring/tint, link and panel name share ${c}`,
+                            (!ring || ring.getAttribute('stroke') === c) && (!tint || (tint.getAttribute('fill') === c && +tint.getAttribute('fill-opacity') >= 0.35))
+                            && link && link.getAttribute('stroke') === c && (!pn || pnc === c || pnc === hex2rgb(c)),
+                            JSON.stringify({ ring: ring && ring.getAttribute('stroke'), tint: tint && tint.getAttribute('fill'), link: link && link.getAttribute('stroke'), pn: pnc }));
+                    }
+                    check('owner ring >= 3px non-scaling', [...gd.querySelectorAll('.tile-owner-ring')].every(r => +r.getAttribute('stroke-width') >= 3));
+                    st.boardLinks = savedLinks; st.players.length = 0; savedPlayers.forEach(p => st.players.push(p));
+                }
                 st.boardIndustries = savedInd;
             }
             check('town labels still on top after link redraw', gd.getElementById('game-board').lastElementChild.id === 'town-labels-layer');

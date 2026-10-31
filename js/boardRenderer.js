@@ -965,7 +965,8 @@ class BoardRenderer {
     drawBuiltIndustryTile(parent, x, y, tile) {
         const s = this.citySlotSize;
         const sh = this.citySlotH;
-        const playerColor = this.state.players[tile.playerId].color;
+        const owner = this.state.players[tile.playerId];
+        const pColor = playerColor(owner);
 
         // Real chip artwork, when the tile set has been supplied locally.
         const art = (typeof BoardAssets !== 'undefined' && BoardAssets.tilesReady())
@@ -981,25 +982,32 @@ class BoardRenderer {
                 preserveAspectRatio: 'none',
                 class: 'built-tile' + (tile.flipped ? ' flipped' : ''),
             }));
+            // Whole-chip owner tint (~40%) so the tile itself reads as the
+            // player's colour on both faces.
+            g.appendChild(this.createElement('rect', {
+                x, y, width: s, height: sh, rx: 2.5, ry: 2.5,
+                fill: pColor, 'fill-opacity': 0.4, class: 'tile-owner-tint',
+                'data-owner': String(tile.playerId), 'pointer-events': 'none',
+            }));
             // Only one colour set exists locally, so ownership is carried by a
             // ring in the player's colour rather than by the chip itself.
             g.appendChild(this.createElement('rect', {
                 x: x + 0.6, y: y + 0.6, width: s - 1.2, height: sh - 1.2,
                 rx: 2.5, ry: 2.5, fill: 'none',
-                stroke: '#0b0d12', 'stroke-width': 4.6, 'stroke-opacity': 0.8,
+                stroke: '#0b0d12', 'stroke-width': 6, 'stroke-opacity': 0.85, 'vector-effect': 'non-scaling-stroke',
             }));
             // Thick owner ring (matches the player panel colour) — visible on
             // both faces, so a flipped tile still reads as its owner's.
             g.appendChild(this.createElement('rect', {
                 x: x + 1.2, y: y + 1.2, width: s - 2.4, height: sh - 2.4,
                 rx: 2.5, ry: 2.5, fill: 'none', class: 'tile-owner-ring', 'data-owner': String(tile.playerId),
-                stroke: playerColor, 'stroke-width': 3.2, 'stroke-opacity': 1,
+                stroke: pColor, 'stroke-width': 3.6, 'stroke-opacity': 1, 'vector-effect': 'non-scaling-stroke',
             }));
             // Owner corner flag (bottom-right) for an at-a-glance colour patch.
             const f = Math.round(s * 0.36);
             g.appendChild(this.createElement('path', {
                 d: `M${x + s},${y + sh - f} L${x + s},${y + sh} L${x + s - f},${y + sh} Z`,
-                fill: playerColor, stroke: '#0b0d12', 'stroke-width': 0.8, class: 'tile-owner-flag',
+                fill: pColor, stroke: '#0b0d12', 'stroke-width': 0.8, class: 'tile-owner-flag',
             }));
             // Lit top-left edge gives the chip its thickness.
             g.appendChild(this.createElement('path', {
@@ -1013,7 +1021,7 @@ class BoardRenderer {
         parent = g;
         parent.appendChild(this.createElement('rect', {
             x, y, width: s, height: s, rx: 3, ry: 3,
-            fill: playerColor,
+            fill: pColor,
             stroke: 'rgba(10,8,4,0.75)', 'stroke-width': 1,
             class: 'built-tile' + (tile.flipped ? ' flipped' : ''),
         }));
@@ -1389,7 +1397,8 @@ class BoardRenderer {
             const pos1 = this.pos(conn.cities[0]);
             const pos2 = this.pos(conn.cities[1]);
             if (!pos1 || !pos2) continue;
-            const playerColor = (this.state.players[link.playerId] || {}).color || '#fff';
+            const owner = this.state.players[link.playerId];
+            const pColor = playerColor(owner);
             const segs = [];
             const bp = conn.viaBrewery ? this.pos(conn.viaBrewery) : null;
             if (bp) { segs.push({ x1: pos1.x, y1: pos1.y, x2: bp.x, y2: bp.y }); segs.push({ x1: bp.x, y1: bp.y, x2: pos2.x, y2: pos2.y }); }
@@ -1400,7 +1409,7 @@ class BoardRenderer {
             // casing keeps the light (white) player visible on the dark map.
             for (const seg of segs) {
                 L(seg, { stroke: '#0b0d12', 'stroke-width': 11, 'stroke-opacity': '0.75' });
-                L(seg, { stroke: playerColor, 'stroke-width': 8, 'stroke-opacity': '0.85', class: 'connection-line built link-body' });
+                L(seg, { stroke: pColor, 'stroke-width': 8, 'stroke-opacity': '0.85', class: 'connection-line built link-body', 'data-owner': String(link.playerId) });
                 if (link.type === 'canal') {
                     // Canal: thin water stripe down the middle.
                     L(seg, { stroke: '#1f7fd6', 'stroke-width': 2.5, 'stroke-opacity': '0.9' });
@@ -1413,16 +1422,16 @@ class BoardRenderer {
             const at = bp ? bp : { x: mx, y: my };
             const badge = this.createGroup({ class: 'link-badge', 'pointer-events': 'auto', 'data-link': connId });
             badge.style.cursor = 'pointer';
-            badge.appendChild(this.createElement('circle', { cx: at.x, cy: at.y, r: 8, fill: playerColor, stroke: '#0b0d12', 'stroke-width': 2 }));
+            badge.appendChild(this.createElement('circle', { cx: at.x, cy: at.y, r: 8, fill: pColor, stroke: '#0b0d12', 'stroke-width': 2 }));
             badge.appendChild(this.text(link.type === 'canal' ? '≈' : '≡', {
                 x: at.x, y: at.y + 0.5, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-                'font-size': '10', 'font-weight': '700', fill: (playerColor === '#d9d0c2' || playerColor === '#f39c12') ? '#111' : '#fff', 'pointer-events': 'none',
+                'font-size': '10', 'font-weight': '700', fill: playerTextOn(owner), 'pointer-events': 'none',
             }));
             // Current VP this link would score at era end (same function as scoring).
             const lvp = (typeof linkScoreBreakdown === 'function') ? linkScoreBreakdown(this.state, connId) : null;
             if (lvp) {
                 badge.appendChild(this.createElement('rect', { x: at.x + 7, y: at.y - 6.5, width: lvp.total >= 10 ? 19 : 14, height: 13, rx: 3, ry: 3,
-                    fill: '#0b0d12', 'fill-opacity': '0.85', stroke: playerColor, 'stroke-width': 1 }));
+                    fill: '#0b0d12', 'fill-opacity': '0.85', stroke: pColor, 'stroke-width': 1.5 }));
                 badge.appendChild(this.text('+' + lvp.total, { x: at.x + 9, y: at.y + 0.5, 'dominant-baseline': 'central',
                     'font-size': '9', 'font-weight': '700', fill: '#ffe08a', class: 'link-vp', 'data-vp': String(lvp.total), 'pointer-events': 'none' }));
                 // Generous invisible hit target for fingers.

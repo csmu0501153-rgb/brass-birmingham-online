@@ -22,10 +22,10 @@
     --border-light: #6a543a;
 
     /* Player colors */
-    --player-red: #c0392b;
-    --player-yellow: #d4a017;
-    --player-purple: #8e44ad;
-    --player-white: #d9d0c2;
+    --player-red: #e53935;
+    --player-yellow: #ffd400;
+    --player-purple: #a64dff;
+    --player-white: #f4f4f4;
 
     /* Resource colors */
     --coal-color: #2c2c2c;

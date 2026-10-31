@@ -205,8 +205,8 @@ class UIManager {
         playerLabel.textContent = this.state.gameOver ? 'Game Over'
             : (player.id === this.myId ? (this.pendingBonus ? 'Your Turn — choose bonus' : 'Your Turn')
             : `${player.name}'s Turn`);
-        playerLabel.style.backgroundColor = player.color;
-        playerLabel.style.color = player.colorName === 'White' ? '#1a1510' : 'white';
+        playerLabel.style.backgroundColor = playerColor(player);
+        playerLabel.style.color = playerTextOn(player);
 
         const actionsLeft = this.state.actionsPerTurn - this.state.actionsThisTurn;
         document.getElementById('actions-remaining-label').textContent =
@@ -230,11 +230,11 @@ class UIManager {
             const panel = document.createElement('div');
             panel.className = `player-panel${isActive ? ' active' : ''}`;
             // Set the left border color via the panel itself (CSS uses border-left)
-            panel.style.borderLeftColor = player.color;
+            panel.style.borderLeftColor = playerColor(player);
 
             panel.innerHTML = `
                 <div class="player-panel-header">
-                    <span class="player-panel-name" style="color: ${player.color}">${player.name}${player.isAI ? ' <span class="ai-chip">AI</span>' : ''}${player.id === this.myId ? ' <span class="ai-chip me-chip">You</span>' : ''}${!player.isAI && this.connected.length && !this.connected[player.id] ? ' <span class="ai-chip offline-chip">Offline</span>' : ''}${this.state.gameOver ? '' : (isActive ? ' <span class="ai-chip turn-chip">Acting</span>' : ' <span class="ai-chip wait-chip">Waiting</span>')}</span>
+                    <span class="player-panel-name" style="color: ${playerColor(player)}">${player.name}${player.isAI ? ' <span class="ai-chip">AI</span>' : ''}${player.id === this.myId ? ' <span class="ai-chip me-chip">You</span>' : ''}${!player.isAI && this.connected.length && !this.connected[player.id] ? ' <span class="ai-chip offline-chip">Offline</span>' : ''}${this.state.gameOver ? '' : (isActive ? ' <span class="ai-chip turn-chip">Acting</span>' : ' <span class="ai-chip wait-chip">Waiting</span>')}</span>
                     <span class="player-panel-vp">${player.vp} <span style="font-size:10px;font-weight:400;color:var(--text-muted)">VP</span></span>
                 </div>
                 <div class="player-panel-stats">
@@ -705,7 +705,7 @@ class UIManager {
             } else {
                 const player = entry.playerId !== null ? this.state.players[entry.playerId] : null;
                 if (player) {
-                    div.innerHTML = `<span class="log-player" style="color:${player.color}">${player.name}</span> ${entry.message}`;
+                    div.innerHTML = `<span class="log-player" style="color:${playerColor(player)}">${player.name}</span> ${entry.message}`;
                 } else {
                     div.textContent = entry.message;
                 }
@@ -725,7 +725,7 @@ class UIManager {
         const subtitleEl = document.querySelector('.turn-transition-subtitle');
 
         nameEl.textContent = player.name;
-        nameEl.style.color = player.color;
+        nameEl.style.color = playerColor(player);
         if (subtitleEl) subtitleEl.textContent = player.id === this.myId ? 'Your Turn'
             : (player.isAI ? 'AI Turn' : "Opponent's Turn");
 
@@ -1610,7 +1610,7 @@ class UIManager {
         for (const s of scores) {
             const player = this.state.players[s.playerId];
             html += `<tr>
-                <td style="color:${player.color}">${player.name}</td>
+                <td style="color:${playerColor(player)}">${player.name}</td>
                 <td>${s.linkVP}</td>
                 <td>${s.industryVP}</td>
                 <td class="total-row">${s.totalVP}</td>
@@ -1644,7 +1644,7 @@ class UIManager {
         sorted.forEach((p, i) => {
             html += `<tr${i === 0 ? ' class="total-row"' : ''}>
                 <td>${i + 1}</td>
-                <td style="color:${p.color}">${p.name}</td>
+                <td style="color:${playerColor(p)}">${p.name}</td>
                 <td>${p.vp}</td>
                 <td>${this.state.getIncomeLevel(p.id)}</td>
                 <td>£${p.money}</td>

@@ -286,7 +286,7 @@ function setupBoardTools(renderer, st) {
     let on = true;
     try { on = localStorage.getItem('brass-labels') !== 'off'; } catch (e) {}
     const players = (st.players || []).map(p =>
-        `<span class="lg-player"><i style="background:${p.color}"></i>${String(p.name || '').replace(/[<>&"]/g, '')}</span>`).join('');
+        `<span class="lg-player"><i style="background:${playerColor(p)}"></i>${String(p.name || '').replace(/[<>&"]/g, '')}</span>`).join('');
     box.innerHTML = `<div class="bt-row"><button id="toggle-labels-btn" type="button"></button><button id="toggle-hints-btn" type="button">顯示可蓋位置</button></div>
         <details id="link-legend"><summary>圖例</summary>
           <div class="lg-row"><svg width="40" height="12"><line x1="4" y1="6" x2="36" y2="6" stroke="#888" stroke-width="10" stroke-linecap="round"/><line x1="4" y1="6" x2="36" y2="6" stroke="#1f7fd6" stroke-width="6" stroke-linecap="round"/></svg>運河（藍線）</div>
