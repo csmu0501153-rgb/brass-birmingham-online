@@ -90,6 +90,49 @@ async function load(url, errors, lang) {
         check('client state has opponents\' hands only as hidden placeholders', opp.hand.every(c => c.type === 'hidden'));
         check('lang toggle lives in the top bar (no overlap with log)', !!gd.querySelector('#top-bar .lang-toggle'));
         check('player panels show 行動中 / 等待中 labels', gd.getElementById('player-panels').textContent.includes('等待中') && gd.getElementById('player-panels').textContent.includes('行動中'));
+        {
+            // Player-mat "next tile" popover: content must match INDUSTRY_DATA + my real remaining stack.
+            const W = g.window; const ID = W.eval('INDUSTRY_DATA'); const me = um.state.players[um.myId];
+            const types = Object.keys(ID); let allOk = true; const bad = [];
+            for (const type of types) {
+                const el = gd.querySelector(`#player-mat .mat-industry[data-type="${type}"]`);
+                el.dispatchEvent(new W.MouseEvent('mouseenter'));
+                const tip = gd.getElementById('tile-tip');
+                const unused = me.industryTiles[type].filter(t => !t.used);
+                const nx = unused[0]; const src = ID[type].find(r => r.level === nx.level);
+                const f = k => { const r = tip.querySelector(`[data-f="${k}"] b`); return r && r.textContent; };
+                const ok = !tip.hidden && tip.dataset.type === type && tip.querySelector('[data-f="level"]').textContent.includes(String(src.level))
+                    && f('cost') === '£' + src.cost && f('coal') === String(src.costCoal) && f('iron') === String(src.costIron)
+                    && f('vp') === String(src.vp) && f('link') === String(src.linkVP) && f('income') === '+' + src.income
+                    && f('remaining') === String(unused.length) && (src.beersToSell == null ? !tip.querySelector('[data-f="beer"]') : f('beer') === String(src.beersToSell))
+                    && f('develop') === (src.canDevelop ? '可以' : '不可（燈泡）')
+                    && tip.querySelector('[data-f="after1"]').textContent.includes(`等級 ${unused[1].level}：${unused[1].vp} 勝利點／連線 ${unused[1].linkVP}`);
+                if (!ok) { allOk = false; bad.push(type + ':' + tip.textContent); }
+                el.dispatchEvent(new W.MouseEvent('mouseleave'));
+            }
+            check('tile tip (hover): every industry shows lowest tile data from INDUSTRY_DATA + 2nd tile', allOk, bad.join(' | '));
+            check('tile tip hides on mouseleave', gd.getElementById('tile-tip').hidden);
+            check('pottery lowest tile marked 不可發展', (() => { const el = gd.querySelector('#player-mat .mat-industry[data-type="pottery"]'); el.dispatchEvent(new W.MouseEvent('mouseenter')); const t = gd.getElementById('tile-tip').textContent; el.dispatchEvent(new W.MouseEvent('mouseleave')); return ID.pottery[0].canDevelop === false && t.includes('不可（燈泡）') && t.includes('此張不能發展'); })());
+            // Simulate using up tiles: remaining count follows state; empty => 已用完
+            const saved = me.industryTiles.ironWorks.map(t => t.used);
+            me.industryTiles.ironWorks[0].used = true;
+            um.updatePlayerMat();
+            let el = gd.querySelector('#player-mat .mat-industry[data-type="ironWorks"]');
+            el.dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
+            let tip = gd.getElementById('tile-tip');
+            check('tile tip (tap): after one used, shows Lv2 and remaining-1', !tip.hidden && tip.querySelector('[data-f="level"]').textContent.includes('2')
+                && tip.querySelector('[data-f="remaining"] b').textContent === String(saved.length - 1) && tip.querySelector('[data-f="vp"] b').textContent === String(ID.ironWorks[1].vp));
+            el.dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
+            check('tile tip: second tap closes it', tip.hidden);
+            me.industryTiles.ironWorks.forEach(t => { t.used = true; });
+            um.updatePlayerMat();
+            el = gd.querySelector('#player-mat .mat-industry[data-type="ironWorks"]');
+            el.dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
+            check('tile tip: empty industry shows 已用完', !tip.hidden && tip.querySelector('[data-f="empty"]').textContent === '已用完', tip.textContent);
+            gd.body.dispatchEvent(new W.MouseEvent('click', { bubbles: true }));
+            check('tile tip: tap elsewhere closes', tip.hidden);
+            me.industryTiles.ironWorks.forEach((t, i) => { t.used = saved[i]; }); um.updatePlayerMat();
+        }
         check('board zoom buttons present', gd.querySelectorAll('.board-zoom button').length === 3);
         {
             const st = g.window.uiManager.state;

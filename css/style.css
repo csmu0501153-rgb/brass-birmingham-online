@@ -2431,3 +2431,15 @@ body.fatal-only #game-screen { display: none !important; }
 #board-tools > *, #board-tools button, #board-tools summary, #board-tools details { pointer-events: auto; }
 body.card-previewing #board-tools { opacity: .25; }
 body.card-previewing #board-tools, body.card-previewing #board-tools * { pointer-events: none !important; }
+
+/* Next-tile popover for the player mat */
+#tile-tip { position: fixed; z-index: 900; max-width: calc(100vw - 16px); background: #1d1a15; color: #f3e9d2;
+  border: 1px solid #c9a24a; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.35;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55); pointer-events: none; box-sizing: border-box; }
+#tile-tip[hidden] { display: none; }
+#tile-tip .tt-head { font-weight: 700; font-size: 13px; margin-bottom: 4px; color: #ffd27a; }
+#tile-tip .tt-row { display: flex; justify-content: space-between; gap: 8px; }
+#tile-tip .tt-row b { color: #fff; }
+#tile-tip .tt-dev { margin-top: 5px; padding-top: 4px; border-top: 1px dashed #6b5a35; font-size: 11px; color: #d8cbb0; }
+#tile-tip .tt-empty { color: #ff9b8a; font-weight: 700; }
+.mat-industry { cursor: pointer; }

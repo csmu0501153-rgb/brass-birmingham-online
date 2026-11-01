@@ -486,12 +486,111 @@ class UIManager {
                 }
             });
 
+            div.dataset.type = type;
+            div.tabIndex = 0;
+            div.addEventListener('mouseenter', () => { if (!this._tileTipTouch) this.showTileTip(type, div); });
+            div.addEventListener('mouseleave', () => { if (!this._tileTipTouch) this.hideTileTip(); });
+            div.addEventListener('touchstart', () => { this._tileTipTouch = true; }, { passive: true });
+            div.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tip = document.getElementById('tile-tip');
+                if (tip && !tip.hidden && tip.dataset.type === type && this._tileTipPinned) { this.hideTileTip(); return; }
+                this.showTileTip(type, div); this._tileTipPinned = true;
+            });
             div.innerHTML = `
                 <div class="mat-industry-label">${display.shortName} (${data.count})</div>
                 <div class="mat-tiles">${tilesHtml}</div>
             `;
             container.appendChild(div);
         }
+    }
+
+    // ---- "Next tile" popover for the player mat ---------------------------
+    // Everything comes from the player's real remaining stack (built from
+    // INDUSTRY_DATA in createPlayer); nothing is hard-coded here.
+    getTileTipData(type, playerId = this.myId) {
+        const player = this.state.players[playerId];
+        const unused = (player.industryTiles[type] || []).filter(t => !t.used);
+        return { type, remaining: unused.length, next: unused[0] || null, after1: unused[1] || null, after2: unused[2] || null };
+    }
+
+    renderTileTipHtml(info) {
+        const zh = !(window.I18N && I18N.lang() === 'en');
+        const L = (a, b) => zh ? a : b;
+        const disp = INDUSTRY_DISPLAY[info.type];
+        const name = zh && window.I18N ? I18N.t(disp.name) : disp.name;
+        const esc = v => String(v);
+        if (!info.next) {
+            return `<div class="tt-head">${name}</div><div class="tt-empty" data-f="empty">${L('已用完', 'All used')}</div>`;
+        }
+        const t = info.next;
+        const row = (k, label, val) => `<div class="tt-row" data-f="${k}"><span>${label}</span><b>${esc(val)}</b></div>`;
+        let h = `<div class="tt-head">${name} <span data-f="level">${L('等級', 'Level')} ${t.level}</span></div>`;
+        h += row('cost', L('建造費用', 'Build cost'), `£${t.cost}`);
+        h += row('coal', L('需煤', 'Coal'), t.costCoal);
+        h += row('iron', L('需鐵', 'Iron'), t.costIron);
+        if (t.beersToSell !== null && t.beersToSell !== undefined) h += row('beer', L('販售需啤酒', 'Beer to sell'), t.beersToSell);
+        if (t.resourceCubes > 0) h += row('cubes', L('產出方塊', 'Produces'), t.resourceCubes);
+        h += row('vp', L('翻面勝利點', 'VP (flipped)'), t.vp);
+        h += row('link', L('連線分（每條相鄰連線）', 'Link VP (per adjacent link)'), t.linkVP);
+        h += row('income', L('翻面收入', 'Income (flipped)'), `+${t.income}`);
+        const era = (t.canalEra && t.railEra) ? L('運河＋鐵路', 'Canal & Rail') : t.canalEra ? L('僅運河時代', 'Canal only') : L('僅鐵路時代', 'Rail only');
+        h += row('era', L('時代', 'Era'), era);
+        h += row('develop', L('可發展', 'Developable'), t.canDevelop ? L('可以', 'Yes') : L('不可（燈泡）', 'No (lightbulb)'));
+        h += row('remaining', L('剩餘張數', 'Tiles left'), info.remaining);
+        const brief = x => x ? `${L('等級', 'Lv')} ${x.level}：${x.vp} ${L('勝利點', 'VP')}／${L('連線', 'link')} ${x.linkVP}／${L('收入', 'inc')} +${x.income}／£${x.cost}` : L('無', 'none');
+        h += `<div class="tt-dev">`;
+        if (!t.canDevelop) {
+            h += `<div data-f="nodev">${L('此張不能發展，必須蓋出才會露出下一張', 'Cannot be developed; build it to reach the next tile')}</div>`;
+            h += `<div data-f="after1">${L('之後下一張', 'Next after it')}：${brief(info.after1)}</div>`;
+        } else {
+            h += `<div data-f="after1">${L('發展 1 張後', 'After developing 1')}：${brief(info.after1)}</div>`;
+            if (info.after1 && info.after1.canDevelop) h += `<div data-f="after2">${L('同產業發展 2 張後', 'After developing 2 here')}：${brief(info.after2)}</div>`;
+        }
+        h += `</div>`;
+        return h;
+    }
+
+    showTileTip(type, anchor) {
+        if (this.myId === null) return;
+        let tip = document.getElementById('tile-tip');
+        if (!tip) {
+            tip = document.createElement('div'); tip.id = 'tile-tip'; tip.setAttribute('role', 'tooltip');
+            document.body.appendChild(tip);
+            document.addEventListener('click', () => this.hideTileTip());
+        }
+        tip.dataset.type = type;
+        tip.innerHTML = this.renderTileTipHtml(this.getTileTipData(type));
+        tip.hidden = false;
+        // Place above the player mat (never over hand / action buttons), clamped to viewport.
+        const vw = window.innerWidth || 390, vh = window.innerHeight || 844;
+        const mat = document.getElementById('player-mat-container') || anchor;
+        const ar = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: 0, top: vh };
+        const mr = mat.getBoundingClientRect ? mat.getBoundingClientRect() : ar;
+        const w = Math.min(260, vw - 16); tip.style.width = w + 'px'; tip.style.left = '0px'; tip.style.top = '0px';
+        const th = tip.offsetHeight || 260;
+        const left = Math.max(8, Math.min(ar.left, vw - w - 8));
+        // Avoid the hand and action buttons too: go above the highest of them,
+        // else below the mat, else pin to the top of the screen (over the board).
+        let avoidTop = mr.top || ar.top;
+        for (const id of ['player-hand', 'action-buttons']) {
+            const e = document.getElementById(id);
+            if (!e || !e.getBoundingClientRect) continue;
+            const r = e.getBoundingClientRect();
+            if (r.height > 0 && r.bottom > 0 && r.top < vh) avoidTop = Math.min(avoidTop, r.top);
+        }
+        let top;
+        if (avoidTop - th - 6 >= 8) top = avoidTop - th - 6;
+        else if ((mr.bottom || 0) + th + 6 <= vh - 8) top = mr.bottom + 6;
+        else top = 8;
+        top = Math.max(8, Math.min(top, vh - th - 8));
+        tip.style.left = left + 'px'; tip.style.top = top + 'px';
+    }
+
+    hideTileTip() {
+        const tip = document.getElementById('tile-tip');
+        if (tip) tip.hidden = true;
+        this._tileTipPinned = false;
     }
 
     // A wooden cube in projection, matching the ones drawn on board tiles.
