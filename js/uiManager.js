@@ -1235,7 +1235,8 @@ class UIManager {
 
         this.renderer.highlightConnections(targets.map(t => t.connectionId));
         this.networkTargets = targets;
-        this.showLinkPicker(targets);
+        this.networkPlayerId = playerId;
+        this.showLinkPicker(targets, playerId);
     }
 
     // Non-modal picker: the map stays tappable (pulsing legal links); a tap
@@ -1246,7 +1247,7 @@ class UIManager {
         return zh === en ? en : `${zh} ${en}`;
     }
 
-    showLinkPicker(targets) {
+    showLinkPicker(targets, playerId = this.state.currentPlayerId) {
         this.hideLinkPicker();
         const box = document.createElement('div');
         box.id = 'link-picker';
@@ -1255,10 +1256,18 @@ class UIManager {
         for (const t of targets) {
             list += `<button class="link-pick-item" data-conn="${t.connectionId}">${this.linkTownName(t.cities[0])} — ${this.linkTownName(t.cities[1])} <span>${typeZh(t.type)} £${t.cost}</span></button>`;
         }
+        const blocked = this.logic.getBlockedNetworkTargets ? this.logic.getBlockedNetworkTargets(playerId) : [];
+        let why = '';
+        if (blocked.length) {
+            const pri = { noMoney: 0, noCoal: 1, noLinks: 2, notInNetwork: 3 };
+            const rows = [...blocked].sort((a, b) => (pri[a.code] ?? 9) - (pri[b.code] ?? 9)).map(x => `<div class="link-why-item" data-conn="${x.connectionId}" data-code="${x.code}"><b>${this.linkTownName(x.cities[0])} — ${this.linkTownName(x.cities[1])}</b><span>${this.networkReasonText(x)}</span></div>`).join('');
+            why = `<details class="link-pick-why"><summary>${this.bL(`為什麼不能蓋？（${blocked.length} 條不可蓋）`, `Why can't I build? (${blocked.length} blocked)`)}</summary>${rows}</details>`;
+        }
         box.innerHTML = `<div class="link-pick-hint">點選地圖上<b>閃爍的金色連線</b>來建造（共 ${targets.length} 條可選）</div>
             <div class="link-pick-confirm hidden"><div class="link-pick-text"></div>
               <button class="link-pick-ok">確認建造</button><button class="link-pick-no">重選</button></div>
-            <details class="link-pick-list"><summary>或從清單選擇</summary>${list}</details>`;
+            <div class="link-pick-why-msg hidden"></div>
+            <details class="link-pick-list"><summary>或從清單選擇</summary>${list}</details>${why}`;
         const host = document.getElementById('board-container');
         // On phones the picker sits under the board so it never hides the links.
         if (host && (typeof innerWidth === 'number' ? innerWidth : 1200) <= 760) { box.classList.add('below-board'); host.after(box); }
@@ -1285,6 +1294,30 @@ class UIManager {
         box.querySelector('.link-pick-confirm').classList.remove('hidden');
         this.renderer.svg.querySelectorAll('.connection-line.chosen-link').forEach(e => e.classList.remove('chosen-link'));
         this.renderer.svg.querySelectorAll(`[data-connection="${connId}"]`).forEach(e => e.classList.add('chosen-link'));
+    }
+
+    // One-line reason (zh/en) why a link cannot be built; x from logic.explainNetworkTarget.
+    networkReasonText(x) {
+        switch (x.code) {
+            case 'built': return this.bL('這條線已經被蓋了', 'Already built');
+            case 'era': return this.bL('這個時代不能蓋這條線', 'Not available in this era');
+            case 'noLinks': return this.bL('你的連線板塊用完了', 'You have no link tiles left');
+            case 'notInNetwork': return this.bL('兩端都不在你的網路內', 'Neither end is in your network');
+            case 'noCoal': return this.bL('沒有煤可用（需連到有煤的未翻面煤礦，或連到商人才能買市場煤）',
+                'No coal available (must connect to an unflipped coal mine with coal, or to a merchant to buy market coal)');
+            case 'noMoney': return this.bL(`錢不夠（需要 £${x.cost}，你有 £${x.money}）`, `Not enough money (need £${x.cost}, you have £${x.money})`);
+            default: return this.bL('無法建造', 'Cannot build');
+        }
+    }
+
+    showLinkWhyNot(connId) {
+        const box = document.getElementById('link-picker');
+        if (!box || !this.logic.explainNetworkTarget) return;
+        const x = this.logic.explainNetworkTarget(this.networkPlayerId ?? this.state.currentPlayerId, connId);
+        if (x.ok || !x.cities) return;
+        const msg = box.querySelector('.link-pick-why-msg');
+        msg.textContent = `${this.linkTownName(x.cities[0])} ⇄ ${this.linkTownName(x.cities[1])}：${this.networkReasonText(x)}`;
+        msg.classList.remove('hidden');
     }
 
     hideLinkPicker() {
@@ -1328,7 +1361,7 @@ class UIManager {
                         <div class="choice-item-name">${name(s.cities[0])} — ${name(s.cities[1])}</div>
                         <div class="choice-item-detail">2nd link · +1 beer</div>
                     </div>
-                    <div class="choice-item-cost">£15 total${s.coalCost > 0 ? ` + £${s.coalCost} coal` : ''}</div>
+                    <div class="choice-item-cost">£${s.totalCost ?? 15}${this.bL("（含煤）", " total incl. coal")}</div>
                 </div>
             `;
         }
@@ -1659,6 +1692,8 @@ class UIManager {
             const line = target.closest('.connection-line');
             if (line && line.classList.contains('highlight')) {
                 this.previewLink(line.dataset.connection);
+            } else if (line && line.dataset.connection) {
+                this.showLinkWhyNot(line.dataset.connection);
             }
         }
     }

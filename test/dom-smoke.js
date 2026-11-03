@@ -250,6 +250,21 @@ async function load(url, errors, lang) {
                 const en1 = W.eval('CITIES')[t0.cities[0]]?.name || W.eval('MERCHANTS')[t0.cities[0]].name;
                 check('confirmation shows town names (zh+en) and cost', txt.includes(en1) && txt.includes(W.I18N.zhName(en1)) && txt.includes('£' + t0.cost), txt);
                 um.cancelAction();
+                // "Why can't I build" list: fake a red tile only in Birmingham so Stafford–Cannock is out of network
+                const st = um.state, savedInd = st.boardIndustries, savedLinks = st.boardLinks;
+                st.boardIndustries = { birmingham_0: { playerId: 0, type: 'manufacturer', tileData: {}, flipped: false, resourceCubes: 0 } }; st.boardLinks = {};
+                um.selectedAction = 'network'; um.startNetwork(0);
+                const whyRow = gd.querySelector('#link-picker .link-pick-why .link-why-item[data-conn="cannock-stafford"]');
+                check('why-not list has Stafford–Cannock with zh reason', !!whyRow && whyRow.dataset.code === 'notInNetwork' && whyRow.textContent.includes('兩端都不在你的網路內'), whyRow && whyRow.textContent);
+                check('why-not summary counts blocked links', /為什麼不能蓋？（\d+ 條不可蓋）/.test(gd.querySelector('#link-picker .link-pick-why summary').textContent));
+                check('valid link not in why-not list', !gd.querySelector(`#link-picker .link-why-item[data-conn="${um.logic.getValidNetworkTargets(0)[0]?.connectionId}"]`));
+                um.showLinkWhyNot('cannock-stafford');
+                const wm = gd.querySelector('#link-picker .link-pick-why-msg');
+                check('tapping a blocked link shows its reason', !wm.classList.contains('hidden') && wm.textContent.includes('Stafford') && wm.textContent.includes('兩端都不在你的網路內'), wm.textContent);
+                const nc = um.networkReasonText({ code: 'noCoal' }), nm = um.networkReasonText({ code: 'noMoney', cost: 6, money: 4 });
+                check('reason texts: noCoal mentions merchant, noMoney lists amounts', nc.includes('商人') && nm.includes('£6') && nm.includes('£4'), nc + ' | ' + nm);
+                um.cancelAction();
+                st.boardIndustries = savedInd; st.boardLinks = savedLinks;
                 check('cancel removes link picker', !gd.getElementById('link-picker'));
             } else console.log('SKIP  link picker (no network targets)');
         }

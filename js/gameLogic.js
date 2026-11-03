@@ -403,52 +403,47 @@ class GameLogic {
     // NETWORK Action
     // ========================================================================
 
-    getValidNetworkTargets(playerId) {
+    // Single source of truth for "can this player build this link now?".
+    // Returns { ok, code, connectionId, cities, type, cost?, money? }.
+    // code: 'ok' | 'era' | 'built' | 'noLinks' | 'notInNetwork' | 'noCoal' | 'noMoney' | 'invalid'
+    explainNetworkTarget(playerId, connId) {
+        const conn = CONNECTIONS.find(c => c.id === connId);
+        if (!conn) return { ok: false, code: 'invalid', connectionId: connId };
         const player = this.state.players[playerId];
-        const targets = [];
         const era = this.state.era;
-
-        for (const conn of CONNECTIONS) {
-            if (this.state.boardLinks[conn.id]) continue; // Already built
-
-            // Check era
-            if (era === ERA.CANAL && !conn.canal) continue;
-            if (era === ERA.RAIL && !conn.rail) continue;
-
-            // Check if player has link tiles remaining
-            if (era === ERA.CANAL && player.linksRemaining.canal <= 0) continue;
-            if (era === ERA.RAIL && player.linksRemaining.rail <= 0) continue;
-
-            // Check network connection (at least one end must be in network)
-            // Exception: a player with nothing on the board may link anywhere
-            if (!this.playerHasNoTilesOnBoard(playerId)) {
-                const end1InNetwork = this.state.isInNetwork(playerId, conn.cities[0]);
-                const end2InNetwork = this.state.isInNetwork(playerId, conn.cities[1]);
-                if (!end1InNetwork && !end2InNetwork) continue;
-            }
-
-            // Check cost
-            let cost;
-            if (era === ERA.CANAL) {
-                cost = CANAL_LINK_COST;
-            } else {
-                cost = RAIL_LINK_COST;
-                // Rail also needs coal — check both endpoints, pick cheapest source
-                const coalSource = this.findCheapestCoalForLink(conn, playerId);
-                if (!coalSource) continue; // No coal available from either end
-                cost += coalSource.free ? 0 : coalSource.price;
-            }
-
-            if (cost > player.money) continue;
-
-            targets.push({
-                connectionId: conn.id,
-                cities: conn.cities,
-                cost,
-                type: era === ERA.CANAL ? 'canal' : 'rail',
-            });
+        const type = era === ERA.CANAL ? 'canal' : 'rail';
+        const r = (code, extra = {}) => ({ ok: code === 'ok', code, connectionId: conn.id, cities: conn.cities, type, ...extra });
+        if (era === ERA.CANAL ? !conn.canal : !conn.rail) return r('era');
+        if (this.state.boardLinks[conn.id]) return r('built');
+        if ((era === ERA.CANAL ? player.linksRemaining.canal : player.linksRemaining.rail) <= 0) return r('noLinks');
+        // At least one end must be in network (exception: nothing on the board)
+        if (!this.playerHasNoTilesOnBoard(playerId) &&
+            !this.state.isInNetwork(playerId, conn.cities[0]) &&
+            !this.state.isInNetwork(playerId, conn.cities[1])) return r('notInNetwork');
+        let cost = era === ERA.CANAL ? CANAL_LINK_COST : RAIL_LINK_COST;
+        if (era === ERA.RAIL) {
+            // Coal must be connected to the link after it is placed: either end may reach it
+            const coalSource = this.findCheapestCoalForLink(conn, playerId);
+            if (!coalSource) return r('noCoal');
+            cost += coalSource.free ? 0 : coalSource.price;
         }
+        if (cost > player.money) return r('noMoney', { cost, money: player.money });
+        return r('ok', { cost });
+    }
 
+    // Unbuildable links of the current era (not yet built) with their reason.
+    getBlockedNetworkTargets(playerId) {
+        const era = this.state.era;
+        return CONNECTIONS.filter(c => (era === ERA.CANAL ? c.canal : c.rail) && !this.state.boardLinks[c.id])
+            .map(c => this.explainNetworkTarget(playerId, c.id)).filter(x => !x.ok);
+    }
+
+    getValidNetworkTargets(playerId) {
+        const targets = [];
+        for (const conn of CONNECTIONS) {
+            const x = this.explainNetworkTarget(playerId, conn.id);
+            if (x.ok) targets.push({ connectionId: conn.id, cities: conn.cities, cost: x.cost, type: x.type });
+        }
         return targets;
     }
 
@@ -521,7 +516,20 @@ class GameLogic {
         this.state.boardLinks[firstConnId] = { playerId, type: 'rail' };
 
         const targets = [];
+        // The first link consumes its coal before the second is sourced
+        // (a 1-cube mine cannot feed both links; market price rises).
+        const undoCoal = [];
+        let coal1Cost = 0;
         try {
+            const src1 = this.findCheapestCoalForLink(firstConn, playerId);
+            if (!src1) return [];
+            coal1Cost = src1.free ? 0 : src1.price;
+            if (src1.type === 'mine') {
+                const tile = this.state.boardIndustries[src1.key];
+                tile.resourceCubes--; undoCoal.push(() => tile.resourceCubes++);
+            } else if (this.state.coalMarket > 0) {
+                this.state.coalMarket--; undoCoal.push(() => this.state.coalMarket++);
+            }
             for (const conn of CONNECTIONS) {
                 if (conn.id === firstConnId) continue;
                 if (this.state.boardLinks[conn.id]) continue;
@@ -542,13 +550,19 @@ class GameLogic {
                 const beer = this.findBeerForLink(playerId, conn);
                 if (!beer) continue;
 
+                const coalCost = coalSource.free ? 0 : coalSource.price;
+                // Total for the action must be affordable (same as executeNetworkDouble)
+                if (RAIL_DOUBLE_LINK_COST + coal1Cost + coalCost > player.money) continue;
+
                 targets.push({
                     connectionId: conn.id,
                     cities: conn.cities,
-                    coalCost: coalSource.free ? 0 : coalSource.price,
+                    coalCost,
+                    totalCost: RAIL_DOUBLE_LINK_COST + coal1Cost + coalCost,
                 });
             }
         } finally {
+            while (undoCoal.length) undoCoal.pop()();
             if (hadLink) this.state.boardLinks[firstConnId] = hadLink;
             else delete this.state.boardLinks[firstConnId];
         }

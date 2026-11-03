@@ -2390,6 +2390,12 @@ body.fatal-only #game-screen { display: none !important; }
 #board-tools .bt-row { display: flex; gap: 4px; flex-wrap: wrap; }
 #toggle-hints-btn { opacity: .7; }
 #toggle-hints-btn.on { opacity: 1; border-color: #7dffb0 !important; color: #c9ffe0 !important; }
+.link-pick-why { margin-top: 6px; max-height: 34vh; overflow: auto; }
+.link-pick-why summary { cursor: pointer; opacity: .85; }
+.link-why-item { margin-top: 4px; padding: 5px 8px; border-radius: 6px; border: 1px solid rgba(220,120,100,.35); background: rgba(255,255,255,.03); font-size: 12px; line-height: 1.35; }
+.link-why-item b { display: block; color: #fff0d8; font-weight: 600; }
+.link-why-item span { display: block; color: #f3b9a8; overflow-wrap: anywhere; }
+.link-pick-why-msg { margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(160,60,40,.35); color: #ffe0d4; font-size: 12px; }
 #link-picker.below-board { position: relative; left: auto; bottom: auto; transform: none; width: auto; margin: 4px 6px; order: 1; }
 
 /* Merchant legend: what each merchant buys this game */
